@@ -5,3 +5,4 @@ airflow-home/
 .DS_Store
 __pycache__/
 *.pyc
+pyproject.toml
