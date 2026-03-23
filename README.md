@@ -1,195 +1,361 @@
-# CourseWeave AI 🎓
+# CourseWeave AI
 
-An intelligent, multi-agent chatbot that helps university students plan their coursework based on career objectives. Built with LangChain, RAG, and deployed on Google Cloud Platform.
-
-## 🚀 Features
-
-- **Career-Aligned Course Recommendations**: Get personalized course suggestions based on your target role (Data Scientist, ML Engineer, etc.)
-- **Automated Prerequisite Validation**: Intelligent checking of course prerequisites and co-requisites
-- **Multi-Agent Architecture**: 
-  - Course Planning Agent
-  - Alumni Insights Agent
-  - Analytics Agent
-- **Real-Time Semester Availability**: Track when courses are offered (Fall/Spring)
-- **24/7 Accessibility**: Instant guidance without scheduling constraints
-
-## 📋 Prerequisites
-
-- Python 3.11+
-- Google Cloud Platform account with enabled services:
-  - Cloud Run
-  - Cloud Storage
-  - Secret Manager
-- Git
-
-## 🛠️ Installation
-
-### 1. Clone the Repository
-```bash
-git clone https://github.com/yourusername/courseweave-ai.git
-cd courseweave-ai
-```
-
-### 2. Set Up Virtual Environment
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-### 3. Install Dependencies
-```bash
-pip install -r requirements.txt
-# OR using make
-make install
-```
-
-### 4. Configure Environment Variables
-```bash
-cp .env.example .env
-# Edit .env with your GCP credentials and API keys
-```
-
-Required environment variables:
-```
-GCP_PROJECT_ID=your-project-id
-GCP_REGION=us-central1
-VECTOR_DB_ENDPOINT=your-vertex-ai-endpoint
-OPENAI_API_KEY=your-openai-key  # Or other LLM provider
-LANGCHAIN_API_KEY=your-langchain-key
-```
-
-### 5. Set Up GCP Resources
-```bash
-# Authenticate with GCP
-gcloud auth login
-gcloud config set project YOUR_PROJECT_ID
-
-# Run setup script
-bash scripts/setup_gcp.sh
-```
-
-## Running Locally
-
-### Start the API Server
-```bash
-# Using uvicorn directly
-uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
-
-# OR using make
-make run
-```
-
-API will be available at `http://localhost:8000`
-- Interactive docs: `http://localhost:8000/docs`
-- Health check: `http://localhost:8000/health`
-
-### Data Ingestion
-```bash
-# Scrape and process course catalog data
-python scripts/ingest_data.py --university northeastern
-
-# OR using make
-make ingest
-```
-
-## Testing
-```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=src tests/
-
-# OR using make
-make test
-```
-
-## 🐳 Docker Development
-```bash
-# Build image
-docker build -f docker/Dockerfile -t CourseWeave-ai:latest .
-
-# Run container
-docker-compose -f docker/docker-compose.yml up
-
-# OR using make
-make docker-build
-make docker-run
-```
-
-## ☁️ Deployment to GCP
-
-### Option 1: Using Terraform (Recommended)
-```bash
-cd terraform
-terraform init
-terraform plan
-terraform apply
-```
-
-### Option 2: Manual Deployment
-```bash
-# Deploy to Cloud Run
-bash scripts/deploy.sh
-
-# OR using make
-make deploy
-```
-
-## 📊 Project Structure
-```
-src/
-├── agents/          # Multi-agent implementations
-├── data/            # Data scraping, preprocessing, loading
-├── retrieval/       # RAG pipeline and vector search
-├── api/             # FastAPI endpoints
-└── utils/           # Configuration and utilities
-```
-
-## 🔧 Configuration
-
-Agent and model configurations are in `configs/`:
-- `agent_config.yaml`: Agent-specific parameters
-- `model_config.yaml`: LLM and embedding model settings
-- `gcp_config.yaml`: GCP service configurations
-
-## 📚 Documentation
-
-- [Architecture Overview](docs/architecture.md)
-- [API Documentation](docs/api_documentation.md)
-- [Deployment Guide](docs/deployment_guide.md)
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
-
-## 👥 Team
-
-- Sachin Sreekumar
-- Nagashree Bommenahalli Kumaraswamy
-- Vigneshwaran Jayaraman
-- Kavin Priyadarrsan Murugesan
-- Jogeashwini Srinivasan Ramesh
-- Siddharth Mohapatra
-
-## 🙏 Acknowledgments
-
-- Northeastern University MLOps Course
-- LangChain Framework
-- Google Cloud Platform
-
-## 📧 Contact
-
-Project Link: [https://github.com/yourusername/courseweave-ai](https://github.com/yourusername/CourseWeave-ai)
+An AI-powered course recommendation system for Northeastern University graduate students. The system combines real job market data, structured academic data, and a full RAG retrieval pipeline to suggest personalized course paths based on a student's completed courses, career goals, and degree requirements.
 
 ---
 
-**Crafted with ❤️ for University students, by University students**
+## Architecture Overview
+
+```
+Student Query
+    |
+    v
+Postgres Pre-filter       -- completed courses, eligible courses, prerequisites,
+    |                        degree audit, credit tracking, path selection
+    v
+Query Builder             -- reads careers.json (Adzuna + Gemini enriched)
+    |                        builds skill-based search query
+    v
+Pinecone Hybrid Search    -- dense (BGE-small-en-v1.5) + sparse (BM25)
+    |                        native dotproduct fusion on courseweave-hybrid index
+    v
+Cross-Encoder Reranking   -- ms-marco-MiniLM-L-6-v2
+    |                        uses HyDE hypothesis text for scoring
+    v
+MMR Diversity             -- penalizes overlap with completed courses
+    |                        and among selected recommendations
+    v
+Guardrails                -- double check: eligible only + not completed
+    |
+    v
+Gemini 2.5 Flash          -- conversational explanation with degree context
+    |                        exponential backoff retry on rate limits
+    v
+Student Recommendation
+```
+
+---
+
+## Project Structure
+
+```
+courseweave-ai/
+|
+|-- Data-Pipeline/                    # Airflow DAG + data ingestion
+|   |-- dags/pipeline_dag.py          # 8-task Airflow pipeline
+|   |-- scripts/
+|   |   |-- acquire_data.py
+|   |   |-- preprocess_data.py
+|   |   |-- validate_data.py
+|   |   |-- load_data.py
+|   |   |-- detect_anomalies.py
+|   |   |-- pdf-extract.py            # GCS PDFs -> semantic chunking -> Pinecone
+|   |   |-- web-extract.py            # NEU catalog scraping -> Pinecone
+|   |   `-- db_config.py
+|   `-- data/raw/
+|       |-- courses.csv
+|       `-- prerequisites.csv
+|
+|-- src/
+|   |-- data/
+|   |   |-- adzuna_scraper.py         # Adzuna API -> raw skills extraction
+|   |   `-- careers_builder.py        # Adzuna + Gemini -> careers.json
+|   |
+|   |-- models/
+|   |   |-- postgres_filter.py        # student context + degree audit
+|   |   |-- query_builder.py          # careers.json -> skill query
+|   |   `-- retriever.py              # full RAG pipeline
+|   |
+|   |-- agents/
+|   |   `-- recommendation_agent.py   # orchestrates pipeline + Gemini explanation
+|   |
+|   `-- evaluation/
+|       |-- eval_runner.py            # evaluation metrics + MLflow hook
+|       `-- llm_comparator.py         # multi-LLM response comparison
+|
+|-- data/
+|   |-- careers.json                  # Adzuna + Gemini career skill profiles
+|   |-- eval_dataset.json             # 15 hand-crafted test cases
+|   |-- schema.sql                    # Postgres table definitions
+|   `-- Seed_data.pgsql               # seed data for all tables
+|
+|-- .env.example                      # required environment variables
+`-- pyproject.toml
+```
+
+---
+
+## Environment Variables
+
+Create a `.env` file in the project root with the following:
+
+```
+# Postgres (VM instance on GCP)
+DB_HOST=34.23.27.68
+DB_PORT=5432
+DB_NAME=courseweave
+DB_USER=courseweave_user
+DB_PASSWORD=your_password
+
+# Pinecone
+PINECONE_API_KEY=your_key
+PINECONE_INDEX_NAME=courseweave-hybrid
+
+# GCP / Vertex AI
+GCP_PROJECT_ID=courseweave-ai
+GCP_LOCATION=us-central1
+GCS_BUCKET=courseweave-ai-data
+
+# Adzuna (for careers.json refresh)
+ADZUNA_APP_ID=your_app_id
+ADZUNA_APP_KEY=your_app_key
+
+# LLM Comparison (optional — Groq is free)
+GROQ_API_KEY=your_key
+OPENAI_API_KEY=your_key   # optional
+```
+
+**GCP Authentication (local development):**
+```bash
+gcloud auth application-default login
+gcloud config set project courseweave-ai
+```
+
+No `GOOGLE_APPLICATION_CREDENTIALS` file needed. The `google-genai` SDK uses Application Default Credentials locally and the GCP metadata server in production.
+
+---
+
+## Database Schema
+
+Four tables in PostgreSQL on the GCP VM instance:
+
+| Table | Description |
+|---|---|
+| `courses` | All NEU courses with program_code, course_type (Core/Elective), credits |
+| `prerequisites` | Course prerequisite mappings |
+| `students` | Student profiles with program_code, target_career, degree_path |
+| `student_courses` | Completed courses per student with grades |
+| `program_requirements` | Credit requirements per program and degree path |
+
+The `program_requirements` table contains degree path logic for:
+- MS_DAE: 20 core credits + 12 elective (coursework) / 8 elective + 4 project (project path) / 4 elective + 8 thesis (thesis path)
+- MS_DS, MS_CS, MS_DA, MS_IS: corresponding requirements
+
+---
+
+## Pinecone Index
+
+Index name: `courseweave-hybrid`
+Metric: `dotproduct` (required for hybrid sparse+dense search)
+Dimension: 384 (BGE-small-en-v1.5)
+Vectors: 74 (NEU IE department courses from web catalog + PDF syllabi)
+
+Two data sources populate the index:
+- `web-extract.py`: scrapes NEU course catalog HTML, extracts course descriptions
+- `pdf-extract.py`: processes PDF syllabi from GCS with semantic chunking
+
+---
+
+## careers.json
+
+Located at `data/careers.json`. Generated by running:
+```bash
+python src/data/careers_builder.py
+```
+
+This scrapes 20 Adzuna job postings per career role, extracts skills via regex, then uses Gemini 2.5 Flash to structure and enrich the skill profile. The `llm_additions` field tracks exactly what Gemini added beyond the Adzuna data for full traceability.
+
+Covers: `data_engineer`, `data_scientist`, `ml_engineer`, `data_analyst`
+
+The file is versioned in GCS with DVC and uploaded to `gs://courseweave-ai-data/data/careers.json` on each run.
+
+---
+
+## RAG Pipeline (retriever.py)
+
+The full pipeline in `src/models/retriever.py`:
+
+**Step 1 — Query rewriting**
+Gemini rewrites the skill query into academic language matching course catalog vocabulary. Falls back to original query on failure.
+
+**Step 2 — HyDE (Hypothetical Document Embedding)**
+Gemini generates a hypothetical course description for the query. This is embedded with BGE and used as the search vector. The hypothesis text is also passed to the cross-encoder for better relevance scoring. Falls back to direct embedding on failure.
+
+**Step 3 — Metadata pre-filter**
+Filters Pinecone search to the student's department to reduce noise.
+
+**Step 4 — Native Pinecone hybrid search**
+Single query with both dense (BGE HyDE vector) and sparse (BM25) vectors. Pinecone fuses them natively using dotproduct. Returns 20 candidates.
+
+**Step 5 — Cross-encoder reranking**
+`cross-encoder/ms-marco-MiniLM-L-6-v2` scores each candidate against the HyDE hypothesis text. Threshold set to -10.0 to retain all candidates (cross-encoder produces logit scores, not probabilities).
+
+**Step 6 — Context assembly + MMR**
+Deduplicates to one chunk per course. MMR selects diverse candidates penalizing overlap with both already-selected recommendations and the student's completed courses.
+
+**Step 7 — Guardrails**
+Hard filters: course must be in the student's `eligible_courses` list from Postgres AND must not be in `completed_courses`. Both checks run independently.
+
+---
+
+## Degree Audit Logic
+
+`postgres_filter.py` includes `get_degree_audit()` which computes:
+
+- Credits completed vs total required
+- Core courses remaining
+- Elective credits needed based on chosen path (coursework / project / thesis)
+- `next_action`: one of `ask_path`, `take_core`, `take_elective`, `complete`
+
+When `next_action == ask_path`, the recommendation agent asks the student to choose their degree path before recommending courses. The path is saved to the `students.degree_path` column and the audit is refreshed.
+
+---
+
+## Evaluation
+
+### eval_runner.py
+
+Runs the retrieval pipeline against 15 hand-crafted test cases in `data/eval_dataset.json`. Each test case overrides the student's completed course state so hypothetical scenarios (nearly complete, fresh student, guardrail edge cases) can be tested without modifying the database.
+
+Metrics computed per run:
+- `avg_precision_at_3`: of top 3 recommended, how many are in the expected list
+- `avg_recall_at_3`: of expected courses, how many appear in top 3
+- `total_guardrail_violations`: completed courses appearing in results (must be 0)
+- `prereq_flag_accuracy`: correctly flagging missing prerequisites
+- `pass_rate`: percentage of test cases with zero guardrail violations
+- `gemini_fallback_count`: how many Gemini calls degraded to fallback (rate limit indicator)
+
+Rate limit handling: 15 second sleep between test cases keeps Gemini usage under 10 RPM on the Vertex AI default quota. Change `SLEEP_BETWEEN_TESTS` to 7 after quota increase to 60 RPM is approved.
+
+**Baseline (simple dense retriever, no RAG):**
+```
+avg_precision_at_3:      0.42
+avg_recall_at_3:         0.42
+guardrail_violations:    0
+prereq_flag_accuracy:    0.78
+pass_rate:               1.0
+```
+
+**MLflow integration:**
+```python
+import mlflow
+import json
+from src.evaluation.eval_runner import run_evaluation
+
+config = {
+    "embedding_model": "bge-small-en-v1.5",
+    "top_k": 3,
+    "reranking": True,
+    "mmr": True,
+    "hyde": True,
+    "hybrid_search": True,
+}
+
+with mlflow.start_run(run_name="courseweave_full_rag"):
+    for k, v in config.items():
+        mlflow.log_param(k, v)
+
+    metrics = run_evaluation(pipeline_config=config)
+
+    mlflow.log_metric("avg_precision_at_3",      metrics["avg_precision_at_3"])
+    mlflow.log_metric("avg_recall_at_3",         metrics["avg_recall_at_3"])
+    mlflow.log_metric("guardrail_violations",     metrics["total_guardrail_violations"])
+    mlflow.log_metric("prereq_flag_accuracy",     metrics["prereq_flag_accuracy"])
+    mlflow.log_metric("pass_rate",                metrics["pass_rate"])
+    mlflow.log_metric("gemini_calls_total",       metrics["gemini_calls_total"])
+    mlflow.log_metric("gemini_fallback_count",    metrics["gemini_fallback_count"])
+
+    with open("data/eval_results.json", "w") as f:
+        json.dump(metrics, f, indent=2)
+    mlflow.log_artifact("data/eval_results.json")
+    mlflow.log_artifact("data/eval_dataset.json")
+```
+
+### llm_comparator.py
+
+Runs the same retrieval results through multiple LLMs and compares response quality. Retrieval runs once; the same courses are passed to each LLM independently.
+
+Models:
+- Gemini 2.5 Flash via Vertex AI (GCP credits, always available)
+- Llama 3.3 70B via Groq (free tier — set `GROQ_API_KEY` in `.env`)
+- GPT-4o mini via OpenAI (optional — set `OPENAI_API_KEY` in `.env`)
+
+Missing keys are detected automatically and those models are skipped.
+
+**MLflow integration:**
+```python
+import mlflow
+from src.evaluation.llm_comparator import compare_llms_for_student
+
+with mlflow.start_run(run_name="llm_comparison_student_1"):
+    results = compare_llms_for_student(student_id=1)
+
+    for llm_name, data in results["responses"].items():
+        mlflow.log_metric(f"{llm_name}_latency_seconds", data["latency_seconds"])
+        mlflow.log_metric(f"{llm_name}_response_length", data["response_length"])
+        mlflow.log_param(f"{llm_name}_status",           data["status"])
+        if data["response"]:
+            mlflow.log_text(data["response"], f"{llm_name}_response.txt")
+
+    mlflow.log_text(results["prompt"], "shared_prompt.txt")
+
+    with open("data/llm_comparison.json", "w") as f:
+        json.dump(results, f, indent=2)
+    mlflow.log_artifact("data/llm_comparison.json")
+```
+
+---
+
+## Running the Pipeline
+
+**Generate / refresh careers.json:**
+```bash
+python src/data/careers_builder.py
+```
+
+**Test the full retrieval pipeline:**
+```bash
+python src/models/retriever.py
+```
+
+**Test the recommendation agent:**
+```bash
+python src/agents/recommendation_agent.py
+```
+
+**Run evaluation:**
+```bash
+python src/evaluation/eval_runner.py
+```
+
+**Run LLM comparison:**
+```bash
+python src/evaluation/llm_comparator.py
+```
+
+---
+
+## Data Pipeline (Airflow)
+
+The Airflow DAG in `Data-Pipeline/dags/pipeline_dag.py` runs weekly and executes 8 tasks in sequence:
+
+1. `acquire_data` — downloads CSVs from GCS bucket
+2. `preprocess_data` — cleans and normalizes course and prerequisite data
+3. `validate_data` — schema validation, generates stats report
+4. `detect_anomalies` — SQL-based checks for circular prerequisites and missing prereq violations
+5. `bias_detection` — Fairlearn analysis across program coverage
+6. `dvc_versioning` — versions data artifacts to GCS DVC remote
+7. `load_data` — upserts to PostgreSQL with ON CONFLICT DO NOTHING
+8. `pipeline_report` — generates summary, sends Slack alert
+
+Slack alerts are sent on each task completion or failure via `SLACK_WEBHOOK_URL`.
+
+---
+
+## Known Limitations
+
+**Pinecone sparse vectors:** The `courseweave-hybrid` index uses dotproduct metric and supports sparse vectors. BM25 sparse vectors are fitted at runtime from the corpus. If sparse vector upserts have not been performed, the pipeline falls back to dense-only search automatically.
+
+**Gemini rate limits:** Vertex AI default quota is 10 requests per minute for Gemini 2.5 Flash. The eval runner sleeps 15 seconds between test cases to stay within this limit. Request a quota increase to 60 RPM at `https://console.cloud.google.com/iam-admin/quotas?project=courseweave-ai` to reduce eval run time from 4 minutes to under 2 minutes.
+
+**Cross-encoder scores:** The `ms-marco-MiniLM-L-6-v2` cross-encoder produces logit scores, not probabilities. Scores are negative for most course-query pairs on this corpus. The threshold is set to -10.0 to retain all candidates and let MMR and guardrails do the final filtering. Relative ranking is correct even with negative absolute scores.
