@@ -1,0 +1,34 @@
+[project]
+name = "courseweave-ai"
+version = "0.1.0"
+description = "AI-powered course recommendation chatbot for Northeastern University"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.2.0",
+    "requests>=2.32.0",
+    "psycopg2-binary>=2.9.9",
+    "google-cloud-storage>=3.0.0",
+    "beautifulsoup4>=4.12.0",
+    "langchain-core>=0.1.0",
+    "langchain-huggingface>=0.0.1",
+    "langchain-pinecone>=0.0.1",
+    "pymupdf>=1.23.0",
+    "langchain-experimental>=0.0.1",
+    "fairlearn>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "pytest>=8.0.0",
+    "google-cloud-aiplatform>=1.0.0",
+    "vertexai>=1.0.0",
+    "groq>=1.1.1",
+    "google-genai>=1.68.0",
+    "pinecone>=7.3.0",
+    "sentence-transformers>=5.3.0",
+    "pinecone-text>=0.11.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
