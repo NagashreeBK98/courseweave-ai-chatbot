@@ -2,14 +2,14 @@ name: CD
 
 on:
   push:
-    branches: [main]          # deploy to staging on every merge
+    branches: [main]
   release:
-    types: [published]        # deploy to production on tagged release
+    types: [published]
 
 env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  PROJECT_ID: courseweave-ai
   REGION: us-central1
-  IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/courseweave/api
+  IMAGE: us-central1-docker.pkg.dev/courseweave-ai/courseweave/api
 
 jobs:
   build-push:
@@ -22,7 +22,7 @@ jobs:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -47,7 +47,7 @@ jobs:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
       - name: Deploy to Cloud Run (staging)
         uses: google-github-actions/deploy-cloudrun@v2
@@ -56,12 +56,13 @@ jobs:
           image: ${{ env.IMAGE }}:${{ github.sha }}
           region: ${{ env.REGION }}
           env_vars: |
-            GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+            GCP_PROJECT_ID=courseweave-ai
             GCP_LOCATION=us-central1
             PINECONE_INDEX_NAME=${{ secrets.PINECONE_INDEX_NAME }}
-            DB_HOST=${{ secrets.DB_HOST }}
-            DB_NAME=${{ secrets.DB_NAME }}
-            DB_USER=${{ secrets.DB_USER }}
+            DB_HOST=${{ secrets.PGHOST }}
+            DB_PORT=${{ secrets.PGPORT }}
+            DB_NAME=${{ secrets.PGDATABASE }}
+            DB_USER=${{ secrets.PGUSER }}
           secrets: |
             PINECONE_API_KEY=pinecone-api-key:latest
             DB_PASSWORD=db-password:latest
@@ -76,7 +77,7 @@ jobs:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
       - name: Deploy to Cloud Run (production)
         uses: google-github-actions/deploy-cloudrun@v2
@@ -85,12 +86,13 @@ jobs:
           image: ${{ env.IMAGE }}:${{ github.sha }}
           region: ${{ env.REGION }}
           env_vars: |
-            GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+            GCP_PROJECT_ID=courseweave-ai
             GCP_LOCATION=us-central1
             PINECONE_INDEX_NAME=${{ secrets.PINECONE_INDEX_NAME }}
-            DB_HOST=${{ secrets.DB_HOST }}
-            DB_NAME=${{ secrets.DB_NAME }}
-            DB_USER=${{ secrets.DB_USER }}
+            DB_HOST=${{ secrets.PGHOST }}
+            DB_PORT=${{ secrets.PGPORT }}
+            DB_NAME=${{ secrets.PGDATABASE }}
+            DB_USER=${{ secrets.PGUSER }}
           secrets: |
             PINECONE_API_KEY=pinecone-api-key:latest
             DB_PASSWORD=db-password:latest
