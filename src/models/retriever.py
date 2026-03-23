@@ -55,7 +55,9 @@ GCP_LOCATION        = os.getenv("GCP_LOCATION", "us-central1")
 
 EMBEDDING_MODEL_NAME   = "BAAI/bge-small-en-v1.5"
 CROSS_ENCODER_MODEL    = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-RERANK_SCORE_THRESHOLD = 0.0
+RERANK_SCORE_THRESHOLD = -10.0  # cross-encoder scores range from -inf to +inf
+                                # 0.0 was too strict — most irrelevant pairs score negative
+                                # -10.0 keeps all reasonable candidates for MMR + guardrails
 CANDIDATE_POOL         = 20
 
 logger = logging.getLogger(__name__)
@@ -181,12 +183,12 @@ Rewritten query:"""
         return query
 
 
-def generate_hyde_vector(query: str) -> list:
+def generate_hyde(query: str) -> tuple:
     """
-    HyDE: Generate a hypothetical course description for the query,
-    then embed it. The hypothesis lives closer to real course chunks
-    in embedding space than the raw question does.
-    Falls back to direct embedding if Gemini call fails.
+    HyDE: Generate a hypothetical course description, then embed it.
+    Returns (hyde_vector, hypothesis_text).
+    hypothesis_text used by cross-encoder — natural language scores
+    much better than keyword lists against course descriptions.
     """
     prompt = f"""Write a generic university course description (2-3 sentences)
 that would be highly relevant to a student interested in: {query}
@@ -201,21 +203,26 @@ Return only the course description text, nothing else."""
         hypothesis  = response.text.strip()
         hyde_vector = embedding_model.embed_query(hypothesis)
         logger.info("HyDE hypothesis generated (%d chars)", len(hypothesis))
-        return hyde_vector
+        return hyde_vector, hypothesis
     except Exception as e:
         logger.warning("HyDE generation failed, falling back to direct embedding: %s", e)
-        return embedding_model.embed_query(query)
+        return embedding_model.embed_query(query), query
 
 
 def run_query_layer(query: str) -> dict:
-    """Run the full query layer. Returns original_query, rewritten_query, hyde_vector."""
-    rewritten_query = rewrite_query(query)
-    hyde_vector     = generate_hyde_vector(rewritten_query)
+    """
+    Run the full query layer.
+    Returns original_query, rewritten_query, hyde_vector, hyde_text.
+    hyde_text is passed to cross-encoder for better reranking quality.
+    """
+    rewritten_query        = rewrite_query(query)
+    hyde_vector, hyde_text = generate_hyde(rewritten_query)
 
     return {
         "original_query" : query,
         "rewritten_query": rewritten_query,
-        "hyde_vector"    : hyde_vector
+        "hyde_vector"    : hyde_vector,
+        "hyde_text"      : hyde_text,
     }
 
 
@@ -252,111 +259,18 @@ def build_pinecone_filter(student_context: dict) -> dict:
 
 
 # ============================================================
-# STEPS 3 & 4 — HYBRID RETRIEVAL + RRF FUSION (teammate)
+# STEPS 3 & 4 — NATIVE PINECONE HYBRID RETRIEVAL
 # ============================================================
-
-def dense_search(hyde_vector: list, pinecone_filter: dict, top_k: int) -> list:
-    """Dense vector search using HyDE-generated vector."""
-    query_params = {
-        "vector"          : hyde_vector,
-        "top_k"           : top_k,
-        "include_metadata": True
-    }
-    if pinecone_filter:
-        query_params["filter"] = pinecone_filter
-
-    try:
-        response = index.query(**query_params)
-        matches = response.get("matches", [])
-        return [
-            {
-                "id":       m["id"],
-                "score":    m["score"],
-                "metadata": m.get("metadata", {}) or {}
-            }
-        for m in matches
-        ]
-    except Exception as e:
-        logger.error("Dense search failed: %s", e)
-        return []
-
-
-def sparse_search(rewritten_query: str, pinecone_filter: dict, top_k: int) -> list:
-    """
-    Sparse BM25 search using Pinecone native sparse vectors.
-    Uses zero dense vector to isolate sparse signal.
-
-    FIX: Returns [] gracefully when Pinecone index uses cosine metric
-    instead of dotproduct. Sparse vectors require dotproduct index.
-    Pipeline continues with dense-only results via RRF fallback.
-    """
-    try:
-        sparse_vector = bm25_encoder.encode_queries(rewritten_query)
-    except Exception as e:
-        logger.warning("BM25 encoding failed — skipping sparse search: %s", e)
-        return []
-
-    zero_dense_vector = [0.0] * 384
-
-    query_params = {
-        "vector"          : zero_dense_vector,
-        "sparse_vector"   : sparse_vector,
-        "top_k"           : top_k,
-        "include_metadata": True
-    }
-    if pinecone_filter:
-        query_params["filter"] = pinecone_filter
-
-    try:
-        response = index.query(**query_params)
-        return [
-            {
-                "id":       m["id"],
-                "score":    m["score"],
-                "metadata": m.get("metadata", {}) or {}
-            }
-        for m in matches
-        ]
-    except Exception as e:
-        # FIX: Downgrade to WARNING not ERROR — this is expected when
-        # index uses cosine metric. Pipeline continues with dense-only.
-        logger.warning(
-            "Sparse search unavailable (index may use cosine not dotproduct) "
-            "— continuing with dense-only retrieval: %s", e
-        )
-        return []
-
-
-def rrf_fusion(dense_matches: list, sparse_matches: list, k: int = 60) -> list:
-    """
-    Reciprocal Rank Fusion — merges dense and sparse ranked lists.
-    score(doc) = 1/(k + rank_dense) + 1/(k + rank_sparse)
-    k=60 is the standard default from the original RRF paper.
-
-    Works correctly with sparse_matches=[] — just returns dense ranking.
-    """
-    rrf_scores = {}
-
-    for rank, match in enumerate(dense_matches):
-        mid = match["id"]
-        rrf_scores.setdefault(mid, {"score": 0.0, "match": match})
-        rrf_scores[mid]["score"] += 1.0 / (k + rank + 1)
-
-    for rank, match in enumerate(sparse_matches):
-        mid = match["id"]
-        rrf_scores.setdefault(mid, {"score": 0.0, "match": match})
-        rrf_scores[mid]["score"] += 1.0 / (k + rank + 1)
-
-    fused = sorted(rrf_scores.values(), key=lambda x: x["score"], reverse=True)
-
-    results = []
-    for item in fused:
-        m = item["match"].copy()
-        m["rrf_score"] = round(item["score"], 6)
-        results.append(m)
-
-    return results
-
+# Replaced manual dense + sparse + RRF with a single Pinecone
+# hybrid query. The courseweave-hybrid index uses dotproduct metric
+# which supports sparse_vector natively. Pinecone fuses dense and
+# sparse scores internally — confirmed working:
+#   Dense:  web_IE_1990 score 0.69
+#   Sparse: web_IE_1990 score 0.62
+#   Hybrid: web_IE_1990 score 1.31  (dense + sparse summed by Pinecone)
+# This is simpler, uses one API call instead of two, and leverages
+# Pinecone's native optimized fusion.
+# ============================================================
 
 def run_hybrid_retrieval(
     query_output: dict,
@@ -364,24 +278,55 @@ def run_hybrid_retrieval(
     candidate_pool: int = CANDIDATE_POOL
 ) -> list:
     """
-    Run dense + sparse retrieval and fuse with RRF.
-    If sparse returns empty (cosine index), RRF gracefully uses dense only.
+    Native Pinecone hybrid search — dense + sparse in a single query.
+
+    Pinecone fuses dense (BGE HyDE vector) and sparse (BM25) scores
+    natively using the dotproduct index. Returns candidate_pool results
+    sorted by combined hybrid score.
+
+    Falls back to dense-only if BM25 encoding fails.
     """
-    rewritten_query = query_output["rewritten_query"]
     hyde_vector     = query_output["hyde_vector"]
+    rewritten_query = query_output["rewritten_query"]
 
-    dense_matches  = dense_search(hyde_vector, pinecone_filter, top_k=candidate_pool)
-    sparse_matches = sparse_search(rewritten_query, pinecone_filter, top_k=candidate_pool)
+    # Build sparse vector — fall back to dense-only if BM25 fails
+    sparse_vector = None
+    try:
+        sparse_vector = bm25_encoder.encode_queries(rewritten_query)
+    except Exception as e:
+        logger.warning("BM25 encoding failed — running dense-only: %s", e)
 
-    logger.info("Dense: %d | Sparse: %d", len(dense_matches), len(sparse_matches))
+    query_params = {
+        "vector"          : hyde_vector,
+        "top_k"           : candidate_pool,
+        "include_metadata": True
+    }
+    if sparse_vector is not None:
+        query_params["sparse_vector"] = sparse_vector
+    if pinecone_filter:
+        query_params["filter"] = pinecone_filter
 
-    if not dense_matches and not sparse_matches:
-        logger.warning("Both dense and sparse returned empty — no candidates.")
+    try:
+        response = index.query(**query_params)
+        matches  = response.get("matches", [])
+
+        mode = "hybrid" if sparse_vector is not None else "dense-only"
+        logger.info("Pinecone %s search: %d results", mode, len(matches))
+
+        # Normalize to plain dicts with rrf_score key for downstream compat
+        return [
+            {
+                "id"       : m["id"],
+                "score"    : m["score"],
+                "rrf_score": m["score"],   # alias — cross-encoder uses rerank_score
+                "metadata" : m.get("metadata", {}) or {}
+            }
+            for m in matches
+        ]
+
+    except Exception as e:
+        logger.error("Hybrid retrieval failed: %s", e)
         return []
-
-    fused = rrf_fusion(dense_matches, sparse_matches)
-    logger.info("Fused candidates after RRF: %d", len(fused))
-    return fused
 
 
 # ============================================================
@@ -640,7 +585,7 @@ def apply_guardrails(
 
     final_results = final_results[:top_k]
 
-    if final_results and final_results[0]["score"] < 0.1:
+    if final_results and final_results[0]["score"] < -5.0:
         logger.warning(
             "Top result score is very low (%.4f) — retrieval quality may be poor.",
             final_results[0]["score"]
@@ -696,8 +641,8 @@ def get_relevant_courses(
             logger.warning("No candidates returned from retrieval.")
             return []
 
-        reranked  = rerank_candidates(query_output["rewritten_query"], fused_candidates)
-        assembled = run_context_assembly(reranked, student_context, top_k=top_k * 2)
+        reranked  = rerank_candidates(query_output["hyde_text"], fused_candidates)
+        assembled = run_context_assembly(reranked, student_context, top_k=top_k * 4)
         final     = apply_guardrails(assembled, student_context, top_k=top_k)
 
         logger.info(

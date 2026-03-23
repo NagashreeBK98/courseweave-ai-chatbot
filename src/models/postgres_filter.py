@@ -212,11 +212,235 @@ def reorder_by_prerequisites(
 
     return result
 
+"""
+ADDITION TO postgres_filter.py
+-------------------------------
+Add these two functions to the bottom of your existing postgres_filter.py.
+They handle degree audit logic — credit tracking, path selection, remaining courses.
+"""
 
+
+def get_degree_audit(student_id: int) -> dict:
+    """
+    Full degree audit for a student.
+    Computes credit progress, remaining requirements,
+    and what the chatbot should ask/suggest next.
+
+    Returns:
+    {
+        "student_id":           1,
+        "program_code":         "MS_DAE",
+        "degree_path":          "undecided",
+        "total_credits":        32,
+        "credits_completed":    12,
+        "credits_remaining":    20,
+
+        "core_credits_required":   20,
+        "core_credits_completed":  12,
+        "core_credits_remaining":  8,
+        "core_courses_remaining":  ["IE6600", "IE7275"],
+
+        "elective_credits_required":  12,  # depends on path
+        "elective_credits_completed": 0,
+        "elective_credits_remaining": 12,
+        "electives_completed":        [],
+
+        "project_available":    True,
+        "needs_path_selection": True,   # True if path is undecided
+
+        "on_track":             True,
+        "next_action":          "ask_path" | "take_core" | "take_elective" | "complete"
+    }
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+
+            # Get student profile including degree_path
+            cur.execute("""
+                SELECT id, name, program_code, degree_path, target_career
+                FROM students
+                WHERE id = %s
+            """, (student_id,))
+
+            student = cur.fetchone()
+            if not student:
+                return {"error": f"Student {student_id} not found."}
+            student = dict(student)
+
+            # Get program requirements
+            cur.execute("""
+                SELECT * FROM program_requirements
+                WHERE program_code = %s
+            """, (student["program_code"],))
+
+            req = cur.fetchone()
+            if not req:
+                return {"error": f"Program requirements not found for {student['program_code']}."}
+            req = dict(req)
+
+            # Get all completed courses with their types
+            cur.execute("""
+                SELECT sc.course_code, c.course_type, c.credits
+                FROM student_courses sc
+                JOIN courses c ON sc.course_code = c.course_code
+                WHERE sc.student_id = %s
+            """, (student_id,))
+
+            completed_rows  = cur.fetchall()
+            completed_core  = [r["course_code"] for r in completed_rows if r["course_type"] == "Core"]
+            completed_elec  = [r["course_code"] for r in completed_rows if r["course_type"] == "Elective"]
+            credits_completed = sum(r["credits"] for r in completed_rows)
+
+            # Get remaining core courses
+            cur.execute("""
+                SELECT course_code FROM courses
+                WHERE program_code = %s
+                  AND course_type = 'Core'
+                  AND is_active = TRUE
+                  AND course_code NOT IN (
+                      SELECT course_code FROM student_courses
+                      WHERE student_id = %s
+                  )
+                ORDER BY course_code
+            """, (student["program_code"], student_id))
+
+            core_remaining = [r["course_code"] for r in cur.fetchall()]
+
+            # Compute core credit stats
+            core_credits_completed = len(completed_core) * 4
+            core_credits_remaining = req["core_credits"] - core_credits_completed
+
+            # Determine elective requirements based on chosen path
+            degree_path = student["degree_path"] or "undecided"
+
+            if degree_path == "project":
+                elective_credits_required = req["project_elective_credits"]
+            elif degree_path == "thesis":
+                elective_credits_required = req["thesis_elective_credits"]
+            else:
+                # coursework or undecided — use full elective requirement
+                elective_credits_required = req["elective_credits"]
+
+            elective_credits_completed = len(completed_elec) * 4
+            elective_credits_remaining = max(
+                0, elective_credits_required - elective_credits_completed
+            )
+
+            credits_remaining = req["total_credits"] - credits_completed
+
+            # Determine next action for chatbot
+            needs_path_selection = (
+                degree_path == "undecided" and
+                req["project_available"] and
+                core_credits_remaining <= 8  # ask path when nearing end of core
+            )
+
+            if credits_remaining <= 0:
+                next_action = "complete"
+            elif needs_path_selection:
+                next_action = "ask_path"
+            elif core_credits_remaining > 0:
+                next_action = "take_core"
+            elif elective_credits_remaining > 0:
+                next_action = "take_elective"
+            else:
+                next_action = "complete"
+
+            return {
+                "student_id":               student["id"],
+                "name":                     student["name"],
+                "program_code":             student["program_code"],
+                "program_name":             req["program_name"],
+                "degree_path":              degree_path,
+                "target_career":            student["target_career"],
+
+                "total_credits":            req["total_credits"],
+                "credits_completed":        credits_completed,
+                "credits_remaining":        credits_remaining,
+
+                "core_credits_required":    req["core_credits"],
+                "core_credits_completed":   core_credits_completed,
+                "core_credits_remaining":   max(0, core_credits_remaining),
+                "core_courses_remaining":   core_remaining,
+
+                "elective_credits_required":  elective_credits_required,
+                "elective_credits_completed": elective_credits_completed,
+                "elective_credits_remaining": elective_credits_remaining,
+                "electives_completed":        completed_elec,
+
+                "project_available":        req["project_available"],
+                "project_credits":          req["project_credits"],
+                "needs_path_selection":     needs_path_selection,
+
+                "on_track":                 credits_remaining > 0,
+                "next_action":              next_action,
+            }
+
+    except Exception as e:
+        logger.error("Degree audit failed for student %d: %s", student_id, e)
+        raise
+    finally:
+        conn.close()
+
+
+def update_degree_path(student_id: int, path: str) -> bool:
+    """
+    Save student's chosen degree path to DB.
+    Called when student tells chatbot which path they want.
+
+    Args:
+        path: 'coursework', 'project', or 'thesis'
+
+    Returns True if successful.
+    """
+    valid_paths = {"coursework", "project", "thesis"}
+    if path not in valid_paths:
+        logger.error("Invalid degree path: %s", path)
+        return False
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE students
+                SET degree_path = %s,
+                    path_selected_at = NOW()
+                WHERE id = %s
+            """, (path, student_id))
+        conn.commit()
+        logger.info("Updated degree path for student %d to %s", student_id, path)
+        return True
+    except Exception as e:
+        conn.rollback()
+        logger.error("Failed to update degree path: %s", e)
+        return False
+    finally:
+        conn.close()
+
+
+# ── Test block ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    import logging
     logging.basicConfig(level=logging.INFO)
 
-    # Test with student ID 1 — Aisha Patel, MS_DAE, Data Engineer
+    # ── Test degree audit ────────────────────────────────────────────────────
+    print("\n=== Testing degree audit ===\n")
+
+    for student_id in [1, 2, 5]:
+        audit = get_degree_audit(student_id)
+        if "error" not in audit:
+            print(f"Student:              {audit['name']}")
+            print(f"Program:              {audit['program_code']}")
+            print(f"Path:                 {audit['degree_path']}")
+            print(f"Credits completed:    {audit['credits_completed']}/{audit['total_credits']}")
+            print(f"Core remaining:       {audit['core_courses_remaining']}")
+            print(f"Elective cr needed:   {audit['elective_credits_remaining']}")
+            print(f"Needs path select:    {audit['needs_path_selection']}")
+            print(f"Next action:          {audit['next_action']}")
+            print()
+
+    # ── Test student context ─────────────────────────────────────────────────
     print("\n=== Testing postgres_filter.py ===\n")
 
     context = get_student_context(1)

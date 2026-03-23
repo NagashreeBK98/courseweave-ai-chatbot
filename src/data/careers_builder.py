@@ -16,12 +16,7 @@ import logging
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from google.cloud import storage
-#import vertexai
-#from vertexai.generative_models import GenerativeModel 
-#using genai instead of vertexai to avoid import error in test environment without google-genai installed
 from google import genai
-
-from vertexai.generative_models import GenerativeModel
 
 from adzuna_scraper import scrape_careers
 
@@ -34,8 +29,6 @@ GCP_LOCATION      = os.getenv("GCP_LOCATION", "us-central1")
 GCS_BUCKET        = os.getenv("GCS_BUCKET")
 CAREERS_JSON_PATH = "data/careers.json"
 
-# Initialize Vertex AI
-#vertexai.init(project=GCP_PROJECT_ID, location=GCP_LOCATION)
 gemini_client = genai.Client(
     vertexai=True,
     project=GCP_PROJECT_ID,
