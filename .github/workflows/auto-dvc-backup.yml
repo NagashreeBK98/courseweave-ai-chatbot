@@ -81,4 +81,4 @@ jobs:
           git add .
           git commit -m "Automated DB + Pinecone backup" || echo "No changes"
           git pull --rebase origin main || true
-          git push origin main
+          git push origin mains
