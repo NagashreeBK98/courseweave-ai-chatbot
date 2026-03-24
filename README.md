@@ -69,9 +69,19 @@ courseweave-ai/
 |   |-- agents/
 |   |   `-- recommendation_agent.py   # orchestrates pipeline + Gemini explanation
 |   |
+|   |-- tracking/
+|   |   |-- __init__.py
+|   |   `-- mlflow_tracker.py         # MLflow experiment tracking module
+|   |
 |   `-- evaluation/
 |       |-- eval_runner.py            # evaluation metrics + MLflow hook
 |       `-- llm_comparator.py         # multi-LLM response comparison
+|
+|-- scripts/
+|   |-- run_eval_with_mlflow.py       # MLflow wrapper for RAG evaluation
+|   |-- run_llm_comparison_mlflow.py  # MLflow wrapper for LLM comparison
+|   |-- demo_mlflow_tracker.py        # demo script for all tracking functions
+|   `-- test_mlflow_connection.py     # DagsHub connection test
 |
 |-- data/
 |   |-- careers.json                  # Adzuna + Gemini career skill profiles
@@ -113,6 +123,11 @@ ADZUNA_APP_KEY=your_app_key
 # LLM Comparison (optional — Groq is free)
 GROQ_API_KEY=your_key
 OPENAI_API_KEY=your_key   # optional
+
+# DagsHub / MLflow Experiment Tracking
+DAGSHUB_USERNAME=SIDDHARTH107
+DAGSHUB_TOKEN=your_dagshub_token
+MLFLOW_TRACKING_URI=https://dagshub.com/SIDDHARTH107/courseweave-ai.mlflow
 ```
 
 **GCP Authentication (local development):**
@@ -208,6 +223,95 @@ Hard filters: course must be in the student's `eligible_courses` list from Postg
 - `next_action`: one of `ask_path`, `take_core`, `take_elective`, `complete`
 
 When `next_action == ask_path`, the recommendation agent asks the student to choose their degree path before recommending courses. The path is saved to the `students.degree_path` column and the audit is refreshed.
+
+---
+
+## MLflow Experiment Tracking
+
+All experiment tracking is handled through a remote MLflow server hosted on DagsHub, eliminating the need to run a local MLflow server.
+
+**Dashboard:** [https://dagshub.com/SIDDHARTH107/courseweave-ai.mlflow](https://dagshub.com/SIDDHARTH107/courseweave-ai.mlflow)
+
+### Setup
+
+Install the required packages:
+```bash
+pip install mlflow dagshub python-dotenv
+```
+
+Add the following to your `.env`:
+```
+DAGSHUB_USERNAME=SIDDHARTH107
+DAGSHUB_TOKEN=<xyz>
+MLFLOW_TRACKING_URI=https://dagshub.com/SIDDHARTH107/courseweave-ai.mlflow
+```
+
+Test the connection:
+```bash
+python scripts/test_mlflow_connection.py
+```
+
+### Experiments Tracked
+
+| Experiment | Script | What it logs |
+|---|---|---|
+| `courseweave-rag-evaluation` | `scripts/run_eval_with_mlflow.py` | Precision@3, Recall@3, guardrail violations, prereq accuracy, pass rate across 15 test cases |
+| `courseweave-llm-comparison` | `scripts/run_llm_comparison_mlflow.py` | Latency, response length, and full response text for Gemini, Llama, and GPT-4o mini |
+
+### Tracking Module
+
+`src/tracking/mlflow_tracker.py` provides reusable functions for logging experiments:
+
+- `init_tracking()` — initializes DagsHub + MLflow connection
+- `track_embedding_experiment()` — logs embedding model, chunk size, generation time
+- `track_rag_query()` — logs LLM config, retrieval results, response time, relevance score
+- `track_prompt_experiment()` — logs prompt template versions and performance
+- `track_experiment()` — generic tracker for any experiment type
+
+### Running Evaluations with MLflow
+
+**RAG evaluation (15 test cases):**
+```bash
+python scripts/run_eval_with_mlflow.py
+```
+
+This runs the full retrieval pipeline against `data/eval_dataset.json` and logs all metrics to the DagsHub MLflow dashboard. Takes ~4 minutes due to Gemini rate limiting (15s sleep between test cases).
+
+**LLM comparison (Gemini vs Llama vs GPT-4o):**
+```bash
+python scripts/run_llm_comparison_mlflow.py
+```
+
+Runs the same retrieval context through multiple LLMs and logs latency, response length, and full response text as artifacts.
+
+### Baseline Results
+
+Results from initial evaluation run (March 24, 2026):
+
+| Metric | Value |
+|---|---|
+| avg_precision_at_3 | 0.4667 |
+| avg_recall_at_3 | 0.4667 |
+| pass_rate | 1.0 |
+| guardrail_violations | 0 |
+| prereq_flag_accuracy | 0.7778 |
+| gemini_calls_total | 30 |
+| gemini_fallback_count | 0 |
+
+### Custom MLflow Integration
+
+To log a new experiment type, use the tracking module:
+```python
+from src.tracking.mlflow_tracker import init_tracking, track_experiment
+
+init_tracking()
+track_experiment(
+    experiment_name="courseweave-custom",
+    run_name="my_run",
+    params={"model": "bge-small-en-v1.5", "top_k": 5},
+    metrics={"precision": 0.85, "latency_sec": 2.1}
+)
+```
 
 ---
 
@@ -328,9 +432,19 @@ python src/agents/recommendation_agent.py
 python src/evaluation/eval_runner.py
 ```
 
+**Run evaluation with MLflow tracking:**
+```bash
+python scripts/run_eval_with_mlflow.py
+```
+
 **Run LLM comparison:**
 ```bash
 python src/evaluation/llm_comparator.py
+```
+
+**Run LLM comparison with MLflow tracking:**
+```bash
+python scripts/run_llm_comparison_mlflow.py
 ```
 
 ---
