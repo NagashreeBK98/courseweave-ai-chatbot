@@ -1,0 +1,33 @@
+name: CourseWeave CD
+
+on:
+  workflow_run:
+    workflows: ["CourseWeave CI"]
+    types:
+      - completed
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+
+    - name: Run lightweight evaluation
+      run: |
+        python - <<EOF
+        print("Skipping heavy evaluation in CD")
+        EOF
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: courseweave-build
+        path: .

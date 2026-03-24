@@ -1,0 +1,28 @@
+name: DVC Pipeline
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "Data-Pipeline/**"
+
+jobs:
+  dvc:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: iterative/setup-dvc@v1
+
+    - name: Install deps
+      run: pip install -r requirements.txt
+
+    - name: DVC pull
+      run: dvc pull
+
+    - name: Run DVC pipeline
+      run: dvc repro
+
+    - name: DVC push
+      run: dvc push

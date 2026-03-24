@@ -1,0 +1,56 @@
+name: CourseWeave CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PYTHON_VERSION: "3.10"
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        pip install -U pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov ruff
+
+    - name: Lint (ruff)
+      run: |
+        ruff check .
+
+    - name: Run Unit Tests
+      run: |
+        pytest tests/unit -v
+
+    - name: Validate Imports
+      run: |
+        python - <<EOF
+        import src.agents.recommendation_agent
+        import src.models.retriever
+        import src.models.query_builder
+        import src.data.adzuna_scraper
+        import src.data.careers_builder
+        import src.evaluation.eval_runner
+        print("All imports OK")
+        EOF
+
+    - name: Query builder smoke test
+      run: |
+        python - <<EOF
+        from src.models.query_builder import build_query
+        print(build_query("Data Engineer"))
+        EOF

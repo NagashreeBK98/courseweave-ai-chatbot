@@ -62,7 +62,8 @@ groq>=0.9.0
 
 # ── Testing ──────────────────────────────────────────────────
 pytest>=8.0.0
-
+pytest-cov
+ruff
 
 # ── Data Pipeline (install separately to avoid conflicts) ────
 # apache-airflow>=3.0.0
