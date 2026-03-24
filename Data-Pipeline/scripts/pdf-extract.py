@@ -154,7 +154,7 @@ def run_pipeline():
 
     # Initialize Pinecone
     pc = Pinecone(api_key=PINECONE_API_KEY)
-    index = pc.Index(PINECONE_INDEX_NAME)
+    pc.Index(PINECONE_INDEX_NAME)
 
     # Initialize semantic chunker
     semantic_chunker = SemanticChunker(
