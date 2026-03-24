@@ -1,5 +1,11 @@
-import pytest
+import sys
+from unittest.mock import MagicMock
+
+# Mock retriever BEFORE importing recommendation_agent
+sys.modules["src.models.retriever"] = MagicMock()
+
 from src.agents.recommendation_agent import format_courses_for_prompt
+
 
 def test_format_courses():
     courses = [
@@ -7,7 +13,7 @@ def test_format_courses():
             "course_code": "IE6400",
             "course_name": "Data Mining",
             "text": "Learn data mining techniques",
-            "score": 0.9
+            "score": 0.9,
         }
     ]
 
@@ -15,7 +21,7 @@ def test_format_courses():
         {
             "course_code": "IE6400",
             "prereqs_satisfied": True,
-            "missing_prereqs": []
+            "missing_prereqs": [],
         }
     ]
 
