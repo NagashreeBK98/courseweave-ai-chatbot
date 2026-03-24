@@ -434,7 +434,7 @@ if __name__ == "__main__":
     print(result["recommendation"])
 
     # ── Test 2: Aisha — student chose coursework path → now recommend ────────
-    print(f"\n\n--- Test 2: Aisha chooses coursework path → recommendations ---\n")
+    print("\n\n--- Test 2: Aisha chooses coursework path → recommendations ---\n")
     result2 = generate_recommendation(
         student_id=1,
         degree_path="coursework"
@@ -443,7 +443,7 @@ if __name__ == "__main__":
     print(f"Student:     {result2['student']['name']}")
     print(f"Action:      {result2['action']}")
     print(f"Path saved:  {result2['degree_audit']['degree_path']}")
-    print(f"\nRetrieved courses:")
+    print("\nRetrieved courses:")
     for c in result2.get("courses", []):
         print(f"  {c['course_code']} — {c['course_name']} (score: {c['score']})")
     print(f"\n{'='*60}")
@@ -452,7 +452,7 @@ if __name__ == "__main__":
     print(result2["recommendation"])
 
     # ── Test 3: Carlos — Data Scientist ──────────────────────────────────────
-    print(f"\n\n--- Test 3: Carlos Mendez (Data Scientist) ---\n")
+    print("\n\n--- Test 3: Carlos Mendez (Data Scientist) ---\n")
     result3 = generate_recommendation(student_id=2, degree_path="project")
 
     print(f"Student:     {result3['student']['name']}")

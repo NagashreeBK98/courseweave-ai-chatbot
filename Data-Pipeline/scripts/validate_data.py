@@ -14,7 +14,7 @@ import logging
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
-from datetime import datetime, timezone
+from datetime import timezone
 
 logger = logging.getLogger(__name__)
 

@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 from google.cloud import storage
 from google import genai
 
-from adzuna_scraper import scrape_careers
+from src.data.adzuna_scraper import scrape_careers
 
 load_dotenv()
 

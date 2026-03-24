@@ -1,0 +1,68 @@
+name: CourseWeave CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PYTHON_VERSION: "3.10"
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        pip install -U pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov ruff
+
+    - name: Lint (ruff)
+      run: ruff check .
+
+    - name: Run Unit Tests
+      run: pytest tests/unit -v
+
+    # -------------------------------
+    # Setup GCP credentials (Gemini)
+    # -------------------------------
+    - name: Setup GCP Credentials
+      env:
+        GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+      run: |
+        echo "$GCP_SERVICE_ACCOUNT_KEY" > gcp-key.json
+        echo "GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/gcp-key.json" >> $GITHUB_ENV
+
+    # -------------------------------
+    # Validate Imports
+    # -------------------------------
+    - name: Validate Imports
+      env:
+        PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+        PINECONE_INDEX_NAME: ${{ secrets.PINECONE_INDEX_NAME }}
+        PGHOST: ${{ secrets.PGHOST }}
+        PGPORT: ${{ secrets.PGPORT }}
+        PGUSER: ${{ secrets.PGUSER }}
+        PGDATABASE: ${{ secrets.PGDATABASE }}
+        PG_PASSWORD: ${{ secrets.PG_PASSWORD }}
+      run: |
+        python - <<EOF
+        import src.agents.recommendation_agent
+        import src.models.retriever
+        import src.models.query_builder
+        import src.data.adzuna_scraper
+        import src.data.careers_builder
+        import src.evaluation.eval_runner
+        print("All imports OK")
+        EOF
