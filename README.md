@@ -409,6 +409,193 @@ with mlflow.start_run(run_name="llm_comparison_student_1"):
 ```
 
 ---
+## CI/CD Pipeline
+
+The project uses a three-stage CI/CD workflow implemented with GitHub Actions to ensure code quality, reproducibility, and deployment readiness.
+
+---
+
+### Continuous Integration (CI)
+
+The CI pipeline runs on every push to `main` and `dev`, and on pull requests to `main`. It performs:
+
+1. Environment setup (Python 3.10)
+2. Dependency installation
+3. Ruff linting for code quality
+4. Unit test execution
+5. Secure credential injection
+6. Import validation for all core modules
+
+The CI workflow validates that the full system initializes correctly with external dependencies such as Pinecone, PostgreSQL, and GCP.
+
+#### CI Workflow Steps
+
+- **Linting** — ensures consistent formatting and catches syntax issues
+- **Unit Tests** — validates core business logic
+- **Secrets Injection** — loads Pinecone, PostgreSQL, and GCP credentials
+- **Import Validation** — verifies end-to-end module initialization
+
+This prevents broken code from merging into `main`.
+
+---
+
+### Continuous Deployment (CD)
+
+The CD workflow triggers automatically after CI completes successfully. It performs:
+
+- Dependency installation
+- Lightweight evaluation step
+- Artifact packaging
+
+This stage prepares the system for deployment without running heavy RAG evaluations.
+
+The separation between CI and CD allows:
+
+- Fast validation
+- Modular deployment logic
+- Scalable evaluation stages later
+
+---
+
+### Docker Build Pipeline
+
+A Docker build workflow runs on pushes to the `main` branch. It:
+
+1. Builds the container image
+2. Runs a basic container execution test
+
+This ensures:
+
+- Dockerfile correctness
+- Dependency reproducibility
+- Deployment readiness
+- Environment consistency
+
+The container test verifies that the application starts successfully inside Docker.
+
+---
+
+## Unit Testing
+
+Unit tests are located in:
+
+```
+tests/unit/
+```
+
+The tests cover core system components while mocking external dependencies to keep execution fast and deterministic.
+
+---
+
+### Test Coverage
+
+#### 1. Adzuna Scraper
+
+Validates skill extraction logic from job descriptions.
+
+```
+test_adzuna_scraper.py
+```
+
+Ensures:
+- NLP extraction accuracy
+- Correct skill parsing
+
+#### 2. PostgreSQL Prerequisite Filter
+
+Validates prerequisite checking logic.
+
+```
+test_postgres_filter.py
+```
+
+Ensures:
+- Correct prerequisite validation
+- Eligibility determination
+
+#### 3. Query Builder
+
+Tests skill query construction using mocked career data.
+
+```
+test_query_builder.py
+```
+
+Uses `monkeypatch` to mock `careers.json` loading and ensures:
+- Query generation correctness
+- Deterministic behavior
+
+#### 4. Recommendation Agent
+
+Tests formatting and orchestration logic.
+
+```
+test_recommendation_agent.py
+```
+
+Heavy dependencies (Retriever, Gemini, Pinecone) are mocked using `MagicMock` to:
+- Avoid API calls
+- Speed up CI
+- Isolate logic
+
+---
+
+### Mocking Strategy
+
+External services mocked in tests:
+
+- Pinecone
+- Gemini
+- Retriever pipeline
+- Google SDK
+
+This ensures:
+- Deterministic tests
+- No network dependency
+- Fast CI execution
+- Reproducible results
+
+---
+
+### Test Execution
+
+Run locally:
+
+```bash
+pytest tests/unit -v
+```
+
+CI automatically executes the same tests.
+
+---
+
+## CI/CD Architecture
+
+```
+Push / PR
+   |
+   v
+CI Pipeline
+   ├── Ruff lint
+   ├── Unit tests
+   ├── Secret injection
+   └── Import validation
+           |
+           v
+CD Pipeline
+           |
+           v
+Docker Build
+```
+
+This architecture follows standard MLOps best practices:
+
+- Automated testing
+- Reproducible builds
+- Secure credential handling
+- Containerized deployment readiness
+
+---
 
 ## Running the Pipeline
 
