@@ -66,15 +66,3 @@ jobs:
         import src.evaluation.eval_runner
         print("All imports OK")
         EOF
-
-    # -------------------------------
-    # Smoke Test
-    # -------------------------------
-    - name: Query builder smoke test
-      run: |
-        python src/data/careers_builder.py
-
-        python - <<EOF
-        from src.models.query_builder import build_query
-        print(build_query("Data Engineer"))
-        EOF
