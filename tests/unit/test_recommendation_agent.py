@@ -1,8 +1,10 @@
 import sys
 from unittest.mock import MagicMock
 
-# Mock retriever BEFORE importing recommendation_agent
+# Mock heavy external modules BEFORE import
 sys.modules["src.models.retriever"] = MagicMock()
+sys.modules["google"] = MagicMock()
+sys.modules["google.genai"] = MagicMock()
 
 from src.agents.recommendation_agent import format_courses_for_prompt
 
