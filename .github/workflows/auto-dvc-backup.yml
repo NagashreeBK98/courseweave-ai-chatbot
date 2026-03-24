@@ -1,48 +1,84 @@
-name: DVC Pipeline
+name: CourseWeave Auto DVC Backup
 
 on:
   workflow_dispatch:
   push:
-    paths:
-      - "Data-Pipeline/**"
+    branches:
+      - main
 
 jobs:
-  dvc:
+  dvc-backup:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      # Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.11"
+      # Setup Python
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
 
-    - name: Install dependencies
-      run: |
-        pip install -U pip
-        pip install dvc[gs]
-        pip install -r requirements.txt
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install dvc[gs] pinecone
+          pip install -r requirements.txt
 
-    - name: Setup GCP credentials
-      env:
-        GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-      run: |
-        printf '%s' "$GCP_SERVICE_ACCOUNT_KEY" > gcp-key.json
-        echo "GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/gcp-key.json" >> $GITHUB_ENV
+      # Setup GCP credentials (FIXED)
+      - name: Setup GCP credentials
+        env:
+          GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+        run: |
+          printf '%s' "$GCP_SERVICE_ACCOUNT_KEY" > gcp-key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/gcp-key.json" >> $GITHUB_ENV
 
-    - name: DVC pull
-      run: |
-        cd Data-Pipeline
-        dvc pull
+      # Ensure postgres dump directory exists
+      - name: Ensure dump directory exists
+        run: mkdir -p db/postgres_dumps
 
-    - name: Run DVC pipeline
-      run: |
-        cd Data-Pipeline
-        dvc repro
+      # Run PostgreSQL backup
+      - name: Backup PostgreSQL
+        env:
+          PGHOST: ${{ secrets.PGHOST }}
+          PGPORT: ${{ secrets.PGPORT }}
+          PGDATABASE: ${{ secrets.PGDATABASE }}
+          PGUSER: ${{ secrets.PGUSER }}
+          PGPASSWORD: ${{ secrets.PG_PASSWORD }}
+        run: |
+          chmod +x backup_courseweave.sh
+          ./backup_courseweave.sh
 
-    - name: DVC push
-      run: |
-        cd Data-Pipeline
-        dvc push
+      # Export Pinecone vectors
+      - name: Export Pinecone vectors
+        env:
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+          PINECONE_INDEX_NAME: ${{ secrets.PINECONE_INDEX_NAME }}
+        run: |
+          mkdir -p data/embeddings/pinecone_exports
+          python export_pinecone.py
+
+      # Track new data with DVC
+      - name: Track data with DVC
+        run: |
+          dvc add db/postgres_dumps || true
+          dvc add data/embeddings/pinecone_exports || true
+
+      # Push to DVC remote (GCS)
+      - name: Push to DVC Remote
+        run: dvc push
+
+      # Commit DVC metadata
+      - name: Commit DVC metadata
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "Automated DB + Pinecone backup" || echo "No changes"
+          git pull --rebase origin main || true
+          git push origin main
