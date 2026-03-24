@@ -73,6 +73,9 @@ jobs:
     - name: Query builder smoke test
       run: |
         python - <<EOF
+        from src.data import careers_builder
+        careers_builder.main()
+
         from src.models.query_builder import build_query
         print(build_query("Data Engineer"))
         EOF
