@@ -37,7 +37,7 @@ jobs:
     env:
       GCP_PROJECT_ID: courseweave-ai
       GCP_LOCATION: us-central1
-      PINECONE_API_KEY: dummy
+      PINECONE_API_KEY: dumm
       PINECONE_INDEX_NAME: dummy
       DB_HOST: localhost
       DB_PORT: 5432
