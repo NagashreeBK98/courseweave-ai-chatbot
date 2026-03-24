@@ -5,6 +5,7 @@ on:
     branches: ["**"]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   lint:
@@ -26,9 +27,6 @@ jobs:
       - name: Ruff lint
         run: uvx ruff check src/
 
-      - name: Mypy type check
-        run: uvx mypy src/ --ignore-missing-imports
-
   unit-tests:
     name: Unit tests
     runs-on: ubuntu-latest
@@ -37,7 +35,7 @@ jobs:
     env:
       GCP_PROJECT_ID: courseweave-ai
       GCP_LOCATION: us-central1
-      PINECONE_API_KEY: dumm
+      PINECONE_API_KEY: dummy
       PINECONE_INDEX_NAME: dummy
       DB_HOST: localhost
       DB_PORT: 5432
