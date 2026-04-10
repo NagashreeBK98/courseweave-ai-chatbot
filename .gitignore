@@ -6,3 +6,11 @@ airflow-home/
 __pycache__/
 *.pyc
 pyproject.toml
+
+# Airflow files
+airflow.cfg
+airflow.db*
+logs/
+
+# Generated auth file
+simple_auth_manager_passwords.json.generated
