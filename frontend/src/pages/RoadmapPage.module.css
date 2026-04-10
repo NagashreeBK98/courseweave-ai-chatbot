@@ -1,0 +1,65 @@
+.timeline { display: flex; flex-direction: column; gap: 0; max-width: 860px; }
+
+.semBlock { padding-bottom: 32px; }
+
+.semHead { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+
+.semIconWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.connector {
+  width: 2px;
+  flex: 1;
+  min-height: 24px;
+  background: var(--border);
+  margin-top: 8px;
+}
+
+.completed .connector { background: var(--success); }
+.current .connector { background: var(--accent); }
+
+.semInfo { flex: 1; }
+.semLabel { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.semMeta { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.completedTag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--success-light); color: var(--success); border: 1px solid var(--success-border); }
+.currentTag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--accent-light); color: var(--accent-text); border: 1px solid var(--accent-border); }
+.plannedTag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--bg-secondary); color: var(--text-tertiary); border: 1px solid var(--border); }
+
+.courseGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  margin-left: 36px;
+}
+
+.courseChip {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  transition: box-shadow var(--transition);
+}
+.courseChip:hover { box-shadow: var(--shadow-sm); }
+
+.chip_completed { border-left: 3px solid var(--success); }
+.chip_current { border-left: 3px solid var(--accent); }
+.chip_planned { border-left: 3px solid var(--border-strong); opacity: 0.8; }
+
+.chipTop { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; flex-wrap: wrap; }
+.chipCode {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent-text);
+  background: var(--accent-light);
+  border: 1px solid var(--accent-border);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+}
+.chipName { font-size: 13.5px; font-weight: 500; color: var(--text-primary); line-height: 1.4; margin-bottom: 4px; }
+.chipCredits { font-size: 11.5px; color: var(--text-tertiary); }

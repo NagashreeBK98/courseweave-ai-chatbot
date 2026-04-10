@@ -1,0 +1,92 @@
+.summaryRow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+
+.summaryCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: center;
+}
+.summaryCard:hover { background: var(--bg-secondary); }
+.summaryCard.active { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.08); }
+
+.successCard.active { border-color: var(--success); box-shadow: 0 0 0 3px rgba(22,163,74,0.08); }
+.dangerCard.active { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(220,38,38,0.08); }
+
+.sumNum { font-size: 26px; font-weight: 600; color: var(--text-primary); line-height: 1; }
+.sumLabel { font-size: 12px; color: var(--text-secondary); }
+.green { color: var(--success); }
+.red { color: var(--danger); }
+.blue { color: var(--accent-text); }
+
+.list { display: flex; flex-direction: column; gap: 10px; }
+
+.itemCard { padding: 16px 18px; }
+
+.itemTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.itemLeft { display: flex; align-items: flex-start; gap: 12px; min-width: 0; flex: 1; }
+
+.code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent-text);
+  background: var(--accent-light);
+  border: 1px solid var(--accent-border);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.name { font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px; }
+
+.prereqList { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.prereqLabel { font-size: 12px; color: var(--text-tertiary); }
+.prereqChip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+}
+.prereqMet { background: var(--success-light); color: var(--success); border-color: var(--success-border); }
+.prereqMissing { background: var(--danger-light); color: var(--danger); border-color: var(--danger-border); }
+
+.itemStatus { flex-shrink: 0; }
+
+.eligibleBadge {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12.5px; font-weight: 500; color: var(--success);
+  background: var(--success-light); border: 1px solid var(--success-border);
+  padding: 5px 10px; border-radius: 999px;
+}
+.blockedBadge {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12.5px; font-weight: 500; color: var(--danger);
+  background: var(--danger-light); border: 1px solid var(--danger-border);
+  padding: 5px 10px; border-radius: 999px;
+}
+
+.missingBlock {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: var(--danger-light);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.missingLabel { font-size: 12px; font-weight: 600; color: var(--danger); margin-bottom: 4px; }
+.missingCourse { font-size: 13px; color: var(--danger); }
+
+@media (max-width: 640px) {
+  .summaryRow { grid-template-columns: repeat(2, 1fr); }
+}
