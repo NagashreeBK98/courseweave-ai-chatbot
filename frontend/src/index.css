@@ -36,6 +36,33 @@
   --transition: 150ms ease;
 }
 
+[data-theme="dark"] {
+  --bg:             #0f1117;
+  --bg-card:        #1a1f2e;
+  --bg-secondary:   #141824;
+  --bg-hover:       #1e2436;
+  --border:         #2a3040;
+  --border-strong:  #3a4458;
+  --text-primary:   #f0efed;
+  --text-secondary: #9ba3b2;
+  --text-tertiary:  #5c6475;
+  --accent:         #3b82f6;
+  --accent-light:   #172554;
+  --accent-border:  #1e3a8a;
+  --accent-text:    #60a5fa;
+  --success:        #22c55e;
+  --success-light:  #052e16;
+  --success-border: #14532d;
+  --warning:        #f59e0b;
+  --warning-light:  #1c1402;
+  --warning-border: #78350f;
+  --danger:         #ef4444;
+  --danger-light:   #1c0505;
+  --danger-border:  #7f1d1d;
+  --shadow-sm:      0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md:      0 4px 12px rgba(0,0,0,0.4);
+}
+
 html { font-size: 15px; }
 body {
   font-family: var(--font);

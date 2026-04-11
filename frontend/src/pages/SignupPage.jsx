@@ -40,8 +40,7 @@ export default function SignupPage() {
     <div className={styles.page}>
       <div className={styles.card} style={{ maxWidth: 480 }}>
         <Link to="/" className={styles.backLogo}>
-          <div className={styles.logoMark}>CW</div>
-          <span>Course<strong>Weave</strong> AI</span>
+          <img src="/logo.jpeg" alt="CourseWeave" className={styles.logoImg} />
         </Link>
 
         <h1 className={styles.title}>Create your account</h1>

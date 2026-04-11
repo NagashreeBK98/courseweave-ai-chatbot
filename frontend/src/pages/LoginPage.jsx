@@ -27,8 +27,7 @@ export default function LoginPage() {
     <div className={styles.page}>
       <div className={styles.card}>
         <Link to="/" className={styles.backLogo}>
-          <div className={styles.logoMark}>CW</div>
-          <span>Course<strong>Weave</strong> AI</span>
+          <img src="/logo.jpeg" alt="CourseWeave" className={styles.logoImg} />
         </Link>
 
         <h1 className={styles.title}>Welcome back</h1>

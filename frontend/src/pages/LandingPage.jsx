@@ -6,8 +6,7 @@ export default function LandingPage() {
     <div className={styles.page}>
       <nav className={styles.nav}>
         <div className={styles.navLogo}>
-          <div className={styles.logoMark}>CW</div>
-          <span>Course<strong>Weave</strong> <span className={styles.ai}>AI</span></span>
+          <img src="/logo.jpeg" alt="CourseWeave" className={styles.logoImg} />
         </div>
         <div className={styles.navLinks}>
           <Link to="/login" className={styles.loginLink}>Log in</Link>

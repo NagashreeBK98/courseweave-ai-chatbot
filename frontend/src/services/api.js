@@ -43,4 +43,10 @@ export const recommendApi = {
   get: (data) => api.post('/recommend', data),
 }
 
+export const conversationsApi = {
+  list: ()    => api.get('/conversations'),
+  get:  (id)  => api.get(`/conversations/${id}`),
+  del:  (id)  => api.delete(`/conversations/${id}`),
+}
+
 export default api

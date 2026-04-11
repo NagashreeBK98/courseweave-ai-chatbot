@@ -1,8 +1,9 @@
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import {
   LayoutDashboard, BookOpen, Map, GitBranch,
-  CheckCircle, TrendingUp, LogOut, Bot, ChevronRight
+  TrendingUp, LogOut, Bot, ChevronRight, Sun, Moon
 } from 'lucide-react'
 import styles from './AppShell.module.css'
 
@@ -27,6 +28,17 @@ export default function AppShell() {
   const { student, logout } = useAuth()
   const navigate = useNavigate()
 
+  const [theme, setTheme] = useState(
+    () => localStorage.getItem('cw_theme') || 'light'
+  )
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('cw_theme', theme)
+  }, [theme])
+
+  const toggleTheme = () => setTheme(t => t === 'light' ? 'dark' : 'light')
+
   const initials = student?.name
     ? student.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : '?'
@@ -37,8 +49,7 @@ export default function AppShell() {
     <div className={styles.shell}>
       <aside className={styles.sidebar}>
         <div className={styles.logo}>
-          <div className={styles.logoMark}>CW</div>
-          <span className={styles.logoText}>Course<strong>Weave</strong></span>
+          <img src="/logo.jpeg" alt="CourseWeave" className={styles.logoImg} />
         </div>
 
         <nav className={styles.nav}>
@@ -78,6 +89,13 @@ export default function AppShell() {
           </div>
           <div className={styles.topRight}>
             <span className={styles.programTag}>{student?.program_code}</span>
+            <button
+              className={styles.themeToggle}
+              onClick={toggleTheme}
+              title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+            >
+              {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+            </button>
           </div>
         </header>
 

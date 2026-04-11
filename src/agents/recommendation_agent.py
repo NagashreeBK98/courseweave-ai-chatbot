@@ -415,6 +415,80 @@ def generate_recommendation(
     }
 
 
+def generate_followup(
+    student_id: int,
+    session_context: dict,
+    conversation_history: list,
+) -> dict:
+    """
+    Handle follow-up questions within an existing session.
+    Re-fetches student/degree data from DB but skips Pinecone entirely.
+    Uses conversation history for context-aware Gemini responses.
+
+    Args:
+        student_id:           Postgres student ID
+        session_context:      Cached from first turn { courses, prereq_status, career_goal, career_skills }
+        conversation_history: List of { role: "user"|"model", text: str } dicts
+
+    Returns same shape as generate_recommendation() with action="followup" and courses=[].
+    """
+    logger.info("Follow-up turn for student %d (%d messages in history)", student_id, len(conversation_history))
+
+    student_context = get_student_context(student_id)
+    if not student_context:
+        return {"error": f"Student {student_id} not found."}
+
+    degree_audit  = get_degree_audit(student_id)
+    courses       = session_context.get("courses", [])
+    prereq_status = session_context.get("prereq_status", [])
+    career_goal   = session_context.get("career_goal", student_context.get("target_career", ""))
+    career_skills = session_context.get("career_skills", {})
+
+    courses_text = format_courses_for_prompt(courses, prereq_status)
+
+    history_lines = []
+    for msg in conversation_history:
+        speaker = student_context["name"] if msg["role"] == "user" else "CourseWeave"
+        history_lines.append(f"{speaker}: {msg['text']}")
+    history_text = "\n\n".join(history_lines)
+
+    prompt = f"""You are CourseWeave, a friendly academic advisor at Northeastern University.
+Continue this advising conversation with {student_context['name']}.
+
+STUDENT PROFILE:
+- Program: {degree_audit.get('program_name', student_context['program_code'])}
+- Career goal: {career_goal}
+- Credits completed: {degree_audit.get('credits_completed', 0)} / {degree_audit.get('total_credits', 32)}
+- Completed courses: {', '.join(student_context['completed_courses']) or 'None yet'}
+
+COURSES ALREADY RECOMMENDED:
+{courses_text}
+
+CONVERSATION HISTORY:
+{history_text}
+
+Respond naturally and helpfully to the student's latest message.
+Only reference courses from the list above — never invent new courses or codes.
+Keep your response under 200 words."""
+
+    try:
+        response = gemini_generate(prompt)
+    except Exception as e:
+        logger.error("Gemini follow-up failed: %s", e)
+        response = "I'm having trouble connecting right now. Please try again in a moment."
+
+    return {
+        "student":        student_context,
+        "degree_audit":   degree_audit,
+        "career_goal":    career_goal,
+        "action":         "followup",
+        "courses":        [],
+        "prereq_status":  [],
+        "recommendation": response,
+        "career_skills":  career_skills,
+    }
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 

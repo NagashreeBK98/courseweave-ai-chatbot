@@ -1,6 +1,7 @@
 *.json
 gha-creds-*.json
 .env
+CLAUDE.md
 airflow-home/
 .DS_Store
 __pycache__/

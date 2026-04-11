@@ -8,8 +8,14 @@ import psycopg2.extras
 import jwt
 import bcrypt
 import os
+import json
+import logging
+import traceback
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -79,6 +85,9 @@ class LoginRequest(BaseModel):
 
 class RecommendRequest(BaseModel):
     career_goal: Optional[str] = None
+    degree_path: Optional[str] = None
+    conversation_id: Optional[int] = None
+    user_message: Optional[str] = None
 
 class AddCourseRequest(BaseModel):
     course_code: str
@@ -95,19 +104,22 @@ def signup(req: SignupRequest):
     if req.target_career not in CAREERS:
         raise HTTPException(400, detail=f"Invalid career. Choose from {CAREERS}")
 
-    hashed = bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()
-
     try:
-        conn = get_db()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(
-            "INSERT INTO students (name, email, program_code, target_career, password_hash) VALUES (%s,%s,%s,%s,%s) RETURNING id, name, email, program_code, target_career",
-            (req.name, req.email, req.program_code, req.target_career, hashed),
+        from src.api.students import register_student
+        result = register_student(
+            name=req.name,
+            email=req.email,
+            password=req.password,
+            program_code=req.program_code,
+            target_career=req.target_career,
         )
-        student = dict(cur.result() if hasattr(cur, 'result') else cur.fetchone())
-        conn.close()
+        student = result["student"]
         token = create_token(student["id"], student["email"])
-        return {"token": token, "student": student}
+        return {
+            "token": token,
+            "student": student,
+            "initial_recommendation": result["recommendation"],
+        }
     except psycopg2.errors.UniqueViolation:
         raise HTTPException(409, detail="Email already registered")
     except Exception as e:
@@ -360,22 +372,176 @@ def check_prerequisites(user=Depends(verify_token)):
         raise HTTPException(500, detail=str(e))
 
 
+# ── Conversations ─────────────────────────────────────────────────────────────
+
+@app.get("/conversations")
+def list_conversations(user=Depends(verify_token)):
+    sid = user["student_id"]
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT c.id, c.title, c.updated_at,
+                   COUNT(m.id) AS message_count
+            FROM conversations c
+            LEFT JOIN conversation_messages m ON m.conversation_id = c.id
+            WHERE c.student_id = %s
+            GROUP BY c.id, c.title, c.updated_at
+            ORDER BY c.updated_at DESC
+        """, (sid,))
+        convs = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return convs
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))
+
+
+@app.get("/conversations/{conv_id}")
+def get_conversation(conv_id: int, user=Depends(verify_token)):
+    sid = user["student_id"]
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT id, title, session_context FROM conversations WHERE id = %s AND student_id = %s",
+            (conv_id, sid)
+        )
+        conv = cur.fetchone()
+        if not conv:
+            raise HTTPException(404, detail="Conversation not found")
+        cur.execute("""
+            SELECT role, text, courses, action
+            FROM conversation_messages
+            WHERE conversation_id = %s
+            ORDER BY created_at ASC
+        """, (conv_id,))
+        messages = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return {**dict(conv), "messages": messages}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))
+
+
+@app.delete("/conversations/{conv_id}")
+def delete_conversation(conv_id: int, user=Depends(verify_token)):
+    sid = user["student_id"]
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM conversations WHERE id = %s AND student_id = %s", (conv_id, sid))
+        conn.close()
+        return {"deleted": True}
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))
+
+
 # ── Recommendations ──────────────────────────────────────────────────────────
 
 @app.post("/recommend")
 def recommend(req: RecommendRequest, user=Depends(verify_token)):
     sid = user["student_id"]
     try:
-        import sys, os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-        from src.agents.recommendation_agent import RecommendationAgent
+        from src.agents.recommendation_agent import generate_recommendation, generate_followup
 
-        agent = RecommendationAgent()
-        result = agent.recommend(student_id=sid)
-        return {"recommendations": result, "source": "rag"}
+        conn = get_db()
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        conv_id      = req.conversation_id
+        user_message = req.user_message or ""
+
+        if conv_id and not req.degree_path:
+            # ── Follow-up: load history from DB, skip Pinecone ───────────────
+            cur.execute(
+                "SELECT session_context FROM conversations WHERE id = %s AND student_id = %s",
+                (conv_id, sid)
+            )
+            conv = cur.fetchone()
+            if not conv:
+                raise HTTPException(404, detail="Conversation not found")
+
+            # Save user message before loading history so it's included
+            cur.execute(
+                "INSERT INTO conversation_messages (conversation_id, role, text) VALUES (%s, %s, %s)",
+                (conv_id, "user", user_message)
+            )
+            cur.execute(
+                "SELECT role, text FROM conversation_messages WHERE conversation_id = %s ORDER BY created_at",
+                (conv_id,)
+            )
+            history = [{"role": r["role"], "text": r["text"]} for r in cur.fetchall()]
+
+            result = generate_followup(
+                student_id=sid,
+                session_context=conv["session_context"] or {},
+                conversation_history=history,
+            )
+        else:
+            # ── First turn or path selection: full RAG pipeline ──────────────
+            result = generate_recommendation(
+                student_id=sid,
+                career_goal=req.career_goal or None,
+                degree_path=req.degree_path or None,
+            )
+
+            if "error" not in result:
+                session_ctx = None
+                if result.get("action") == "recommend":
+                    session_ctx = {
+                        "courses":       result.get("courses", []),
+                        "prereq_status": result.get("prereq_status", []),
+                        "career_goal":   result.get("career_goal", ""),
+                        "career_skills": result.get("career_skills", {}),
+                    }
+
+                if conv_id:
+                    # Path selection on existing conversation — update session_context
+                    if session_ctx:
+                        cur.execute(
+                            "UPDATE conversations SET session_context = %s, updated_at = NOW() WHERE id = %s",
+                            (json.dumps(session_ctx), conv_id)
+                        )
+                    if user_message:
+                        cur.execute(
+                            "INSERT INTO conversation_messages (conversation_id, role, text) VALUES (%s, %s, %s)",
+                            (conv_id, "user", user_message)
+                        )
+                else:
+                    # Brand new conversation
+                    title = (user_message[:50] + "…") if len(user_message) > 50 else user_message or f"{req.career_goal or 'Course'} recommendations"
+                    cur.execute(
+                        "INSERT INTO conversations (student_id, title, session_context) VALUES (%s, %s, %s) RETURNING id",
+                        (sid, title, json.dumps(session_ctx) if session_ctx else None)
+                    )
+                    conv_id = cur.fetchone()["id"]
+                    if user_message:
+                        cur.execute(
+                            "INSERT INTO conversation_messages (conversation_id, role, text) VALUES (%s, %s, %s)",
+                            (conv_id, "user", user_message)
+                        )
+
+        if "error" in result:
+            raise HTTPException(500, detail=result["error"])
+
+        # Save bot response
+        if conv_id:
+            cur.execute(
+                "INSERT INTO conversation_messages (conversation_id, role, text, courses, action) VALUES (%s, %s, %s, %s, %s)",
+                (conv_id, "model", result["recommendation"], json.dumps(result.get("courses", [])), result.get("action"))
+            )
+            cur.execute("UPDATE conversations SET updated_at = NOW() WHERE id = %s", (conv_id,))
+
+        conn.close()
+        result["conversation_id"] = conv_id
+        return result
+
     except ImportError:
+        logger.error("RAG import failed — falling back: %s", traceback.format_exc())
         return _fallback_recommend(sid)
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error("RAG pipeline error — falling back: %s", traceback.format_exc())
         return _fallback_recommend(sid)
 
 

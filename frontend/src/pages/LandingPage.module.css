@@ -6,9 +6,7 @@
   background: var(--bg-card); position: sticky; top: 0; z-index: 100;
 }
 .navLogo { display: flex; align-items: center; gap: 10px; font-size: 16px; color: var(--text-primary); }
-.logoMark { width: 32px; height: 32px; background: var(--accent); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #fff; }
-.navLogo strong { font-weight: 600; }
-.ai { color: var(--accent); font-weight: 400; }
+.logoImg { height: 40px; width: auto; object-fit: contain; }
 .navLinks { display: flex; align-items: center; gap: 12px; }
 .loginLink { font-size: 14px; color: var(--text-secondary); padding: 7px 14px; border-radius: var(--radius-sm); transition: background var(--transition); }
 .loginLink:hover { background: var(--bg-secondary); }
