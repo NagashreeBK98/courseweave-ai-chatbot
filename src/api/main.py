@@ -336,7 +336,7 @@ def check_prerequisites(user=Depends(verify_token)):
         completed_codes = {r["course_code"] for r in cur.fetchall()}
 
         cur.execute("SELECT id, course_code FROM students WHERE id = %s", (sid,))
-        student = dict(cur.fetchone())
+        cur.fetchone()
 
         cur.execute(
             "SELECT course_code, course_name FROM courses WHERE program_code = (SELECT program_code FROM students WHERE id = %s) AND is_active = TRUE",
