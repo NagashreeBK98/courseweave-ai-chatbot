@@ -16,10 +16,16 @@ const CAREERS = [
   'Business Analyst', 'Software Engineer', 'ML Engineer',
 ]
 
+const TRACKS = [
+  { value: 'coursework', label: 'Coursework — all electives' },
+  { value: 'project',    label: 'Project — IE 7945 + fewer electives' },
+  { value: 'thesis',     label: 'Thesis — research + fewer electives' },
+]
+
 export default function SignupPage() {
   const { signup } = useAuth()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ name:'', email:'', password:'', program_code:'', target_career:'' })
+  const [form, setForm] = useState({ name:'', email:'', password:'', program_code:'', target_career:'', degree_path:'' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -73,6 +79,13 @@ export default function SignupPage() {
             <select name="target_career" value={form.target_career} onChange={handle} required>
               <option value="">Select your target role…</option>
               {CAREERS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className={styles.field}>
+            <label>Degree track</label>
+            <select name="degree_path" value={form.degree_path} onChange={handle}>
+              <option value="">Undecided — I'll choose later</option>
+              {TRACKS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
           <button type="submit" className={styles.submitBtn} disabled={loading}>
