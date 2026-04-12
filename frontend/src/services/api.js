@@ -27,9 +27,12 @@ export const authApi = {
 }
 
 export const studentApi = {
+  addCourse:       (data) => api.post('/student/courses', data),
+  addCoursesBatch: (data) => api.post('/student/courses/batch', data),
+  getProfile:      ()     => api.get('/student/profile'),
+  updateProfile:   (data) => api.put('/student/profile', data),
   dashboard:    ()           => api.get('/student/dashboard'),
   courses:      ()           => api.get('/student/courses'),
-  addCourse:    (data)       => api.post('/student/courses', data),
   removeCourse: (courseCode) => api.delete(`/student/courses/${courseCode}`),
   prerequisites: ()          => api.get('/student/prerequisites'),
   roadmap:      ()           => api.get('/student/roadmap'),
@@ -38,6 +41,7 @@ export const studentApi = {
 export const coursesApi = {
   list: (params) => api.get('/courses', { params }),
   prerequisites: (code) => api.get(`/courses/${code}/prerequisites`),
+  getDetails: (code) => api.get(`/courses/${code}/details`),
 }
 
 export const recommendApi = {
