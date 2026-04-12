@@ -3,32 +3,40 @@ retriever.py
 ------------
 CourseWeave.ai — Full RAG Retrieval Pipeline
 
-Merged from:
-    - rag_pipeline.py ( query rewriting, HyDE, hybrid search,
-                       RRF fusion, cross-encoder reranking, MMR)
-    - retriever.py    ( double guardrail fix, completed_courses check,
-                       google-genai SDK, real Postgres test block)
+Changes vs previous version:
+    1. REMOVED rewrite_query()
+       Input is always a rich skill string from query_builder.py
+       (e.g. "SQL Python ETL data pipelines..."). Rewriting a structured
+       skill list with Gemini adds noise, not signal, and cost 1 Gemini
+       call per request for zero retrieval improvement.
 
-Fixes applied (v3):
-    - sparse_search: logs warning + returns [] gracefully when index
-      does not support dotproduct (cosine index workaround)
-    - rerank_candidates: `or ""` guard on metadata text to prevent
-      NoneType errors in cross-encoder pairs
-    - run_context_assembly: fallback to deduped order if MMR returns empty
+    2. CACHED HyDE at server startup (_build_hyde_cache)
+       Only 6 career goals are supported. HyDE generates a hypothetical
+       course description per career — the output is deterministic because
+       the input (skill query) never changes between requests. We generate
+       all 6 vectors once at startup and serve from memory forever.
+       Cost: 6 Gemini calls once at startup.
+       Saving: 1 Gemini call per every recommendation request, forever.
+
+Gemini calls per user action after these changes:
+    retriever.py at startup  :  6 calls  (once, builds HyDE cache)
+    retriever.py per request :  0 calls  (cache hit every time)
+    recommendation_agent.py  :  1 call   (the actual recommendation text)
+    Total per request        :  1 call
+
+Previously retriever.py alone was 2 calls per request (rewrite + HyDE).
 
 Contract (unchanged):
-    Input:  query (str), student_context (dict), top_k (int)
-    Output: list of dicts with keys:
-            course_code, course_name, score, source, text, metadata
+    Input:  query (str), student_context (dict), top_k (int), career_goal (str)
+    Output: list of dicts — course_code, course_name, score, source, text, metadata
 
 Pipeline:
-    1. Query rewriting + HyDE          
-    2. Metadata pre-filter             
-    3. Hybrid retrieval (dense+sparse) (sparse skipped if unsupported)
-    4. RRF fusion                      
-    5. Cross-encoder re-ranking        
-    6. Context assembly + MMR          
-    7. Guardrails + format             (merged: eligible + completed check)
+    1. HyDE lookup from startup cache (0 Gemini calls)
+    2. Metadata pre-filter
+    3. Hybrid retrieval (dense + sparse, Pinecone native fusion)
+    4. Cross-encoder re-ranking
+    5. Context assembly + MMR diversity
+    6. Guardrails (eligible + completed check)
 """
 
 import os
@@ -55,10 +63,20 @@ GCP_LOCATION        = os.getenv("GCP_LOCATION", "us-central1")
 
 EMBEDDING_MODEL_NAME   = "BAAI/bge-small-en-v1.5"
 CROSS_ENCODER_MODEL    = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-RERANK_SCORE_THRESHOLD = -10.0  # cross-encoder scores range from -inf to +inf
-                                # 0.0 was too strict — most irrelevant pairs score negative
-                                # -10.0 keeps all reasonable candidates for MMR + guardrails
+RERANK_SCORE_THRESHOLD = -10.0  # ms-marco produces logits, not probabilities
+                                # -10.0 keeps all reasonable candidates
 CANDIDATE_POOL         = 20
+
+# The 6 supported career goals — HyDE vectors pre-built for all of these at startup.
+# Must match the CAREERS list in main.py exactly.
+SUPPORTED_CAREERS = [
+    "Data Engineer",
+    "Data Scientist",
+    "ML Engineer",
+    "Data Analyst",
+    "Business Analyst",
+    "Software Engineer",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +107,8 @@ def _init_pinecone():
 def _init_bm25(index):
     """
     Fetch corpus from Pinecone and fit BM25 encoder.
-    BM25 is used for sparse scoring — falls back gracefully if
-    Pinecone index does not support dotproduct (sparse) queries.
-    Runs once at module load.
+    Runs once at module load. Falls back gracefully if index
+    does not support dotproduct (sparse) queries.
     """
     encoder = BM25Encoder()
     logger.info("Fetching corpus from Pinecone for BM25 fitting...")
@@ -127,11 +144,6 @@ def _init_cross_encoder():
 
 
 def _init_gemini():
-    """
-    Initialize Gemini client using google-genai SDK with Vertex AI.
-    Uses Application Default Credentials locally.
-    On GCP infrastructure, uses metadata server automatically.
-    """
     logger.info("Initializing Gemini 2.5 Flash via Vertex AI...")
     client = genai.Client(
         vertexai=True,
@@ -142,92 +154,127 @@ def _init_gemini():
     return client
 
 
-# Initialize all models and clients once at module load
+def _build_hyde_cache(careers: list, embedding_model, gemini_client) -> dict:
+    """
+    Pre-generate HyDE vectors for all supported career goals at startup.
+
+    Makes exactly len(careers) Gemini calls — once, when the server starts.
+    Every recommendation request for the lifetime of the process is served
+    from this dict — zero Gemini calls in retriever.py per request.
+
+    Cache structure:
+        {
+            "data engineer":   { "vector": [...384 floats...], "text": "This course covers..." },
+            "data scientist":  { "vector": [...], "text": "..." },
+            ...
+        }
+
+    Key is lowercase career name for case-insensitive lookup.
+    Falls back to direct BGE embedding if Gemini fails for any career —
+    the pipeline still works, just with marginally lower retrieval quality
+    for that one career.
+    """
+    cache = {}
+    logger.info("Building HyDE cache for %d career goals...", len(careers))
+
+    for career in careers:
+        key    = career.lower()
+        prompt = (
+            f"Write a generic university graduate course description (2-3 sentences) "
+            f"that would be highly relevant to a student pursuing a career as a {career}. "
+            f"Return only the course description text, nothing else."
+        )
+
+        try:
+            response   = gemini_client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            hypothesis = response.text.strip()
+            vector     = embedding_model.embed_query(hypothesis)
+            cache[key] = {"vector": vector, "text": hypothesis}
+            logger.info("HyDE cached for '%s' (%d chars)", career, len(hypothesis))
+
+        except Exception as e:
+            logger.warning(
+                "HyDE generation failed for '%s', falling back to direct BGE embed: %s",
+                career, e
+            )
+            fallback_query = f"graduate course {career} skills programming data"
+            vector         = embedding_model.embed_query(fallback_query)
+            cache[key]     = {"vector": vector, "text": fallback_query}
+
+    logger.info("HyDE cache built — %d/%d careers ready", len(cache), len(careers))
+    return cache
+
+
+# ── Initialize all models and clients once at module load ──────────────────
+
 embedding_model = _init_embedding_model()
 pc, index       = _init_pinecone()
 bm25_encoder    = _init_bm25(index)
 cross_encoder   = _init_cross_encoder()
 gemini_client   = _init_gemini()
 
-logger.info("All models and clients initialized — pipeline ready")
+# 6 Gemini calls here at startup — zero per request after this
+hyde_cache = _build_hyde_cache(SUPPORTED_CAREERS, embedding_model, gemini_client)
+
+logger.info("All models, clients, and HyDE cache initialized — pipeline ready")
 
 
 # ============================================================
-# STEP 1 — QUERY LAYER (teammate)
+# STEP 1 — QUERY LAYER
 # ============================================================
 
-def rewrite_query(query: str) -> str:
+def get_hyde_output(query: str, career_goal: str = None) -> dict:
     """
-    Use Gemini to rewrite the user query into retrieval-friendly language.
-    Converts conversational phrasing into vocabulary closer to course descriptions.
-    Falls back to original query if Gemini call fails.
+    Returns HyDE vector and hypothesis text for a query.
+
+    For all 6 supported careers: returns from startup cache — 0 Gemini calls.
+    If career_goal is missing or unrecognised (should not happen given
+    validation in main.py): falls back to direct BGE embedding of the
+    skill query — still 0 Gemini calls, marginal quality difference.
+
+    rewrite_query() has been removed. The input is always a structured
+    skill string from query_builder.py — rewriting it added no retrieval
+    improvement and cost 1 Gemini call per request.
+
+    Args:
+        query:       Skill query string from query_builder.build_query()
+        career_goal: Career name passed from recommendation_agent.py.
+                     Used as cache key. Always pass this.
     """
-    prompt = f"""You are helping a university course recommendation system.
-Rewrite the following student query into clear, academic language that would
-match university course catalog descriptions. Return only the rewritten query,
-nothing else.
+    if career_goal:
+        key = career_goal.lower().strip()
+        if key in hyde_cache:
+            cached = hyde_cache[key]
+            logger.info("HyDE cache hit: '%s'", career_goal)
+            return {
+                "original_query" : query,
+                "rewritten_query": query,
+                "hyde_vector"    : cached["vector"],
+                "hyde_text"      : cached["text"],
+                "cache_hit"      : True,
+            }
 
-Student query: {query}
-Rewritten query:"""
-
-    try:
-        response  = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
-        rewritten = response.text.strip()
-        logger.info("Query rewritten: '%s' → '%s'", query[:60], rewritten[:60])
-        return rewritten
-    except Exception as e:
-        logger.warning("Query rewriting failed, using original: %s", e)
-        return query
-
-
-def generate_hyde(query: str) -> tuple:
-    """
-    HyDE: Generate a hypothetical course description, then embed it.
-    Returns (hyde_vector, hypothesis_text).
-    hypothesis_text used by cross-encoder — natural language scores
-    much better than keyword lists against course descriptions.
-    """
-    prompt = f"""Write a generic university course description (2-3 sentences)
-that would be highly relevant to a student interested in: {query}
-
-Return only the course description text, nothing else."""
-
-    try:
-        response    = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
-        hypothesis  = response.text.strip()
-        hyde_vector = embedding_model.embed_query(hypothesis)
-        logger.info("HyDE hypothesis generated (%d chars)", len(hypothesis))
-        return hyde_vector, hypothesis
-    except Exception as e:
-        logger.warning("HyDE generation failed, falling back to direct embedding: %s", e)
-        return embedding_model.embed_query(query), query
-
-
-def run_query_layer(query: str) -> dict:
-    """
-    Run the full query layer.
-    Returns original_query, rewritten_query, hyde_vector, hyde_text.
-    hyde_text is passed to cross-encoder for better reranking quality.
-    """
-    rewritten_query        = rewrite_query(query)
-    hyde_vector, hyde_text = generate_hyde(rewritten_query)
-
+    # Fallback — should only trigger if a career slips past main.py validation
+    logger.warning(
+        "HyDE cache miss for career '%s' — falling back to direct BGE embed. "
+        "Check that SUPPORTED_CAREERS in retriever.py matches CAREERS in main.py.",
+        career_goal
+    )
+    vector = embedding_model.embed_query(query)
     return {
         "original_query" : query,
-        "rewritten_query": rewritten_query,
-        "hyde_vector"    : hyde_vector,
-        "hyde_text"      : hyde_text,
+        "rewritten_query": query,
+        "hyde_vector"    : vector,
+        "hyde_text"      : query,
+        "cache_hit"      : False,
     }
 
 
 # ============================================================
-# STEP 2 — METADATA PRE-FILTER (teammate)
+# STEP 2 — METADATA PRE-FILTER
 # ============================================================
 
 def build_pinecone_filter(student_context: dict) -> dict:
@@ -261,15 +308,12 @@ def build_pinecone_filter(student_context: dict) -> dict:
 # ============================================================
 # STEPS 3 & 4 — NATIVE PINECONE HYBRID RETRIEVAL
 # ============================================================
-# Replaced manual dense + sparse + RRF with a single Pinecone
-# hybrid query. The courseweave-hybrid index uses dotproduct metric
-# which supports sparse_vector natively. Pinecone fuses dense and
-# sparse scores internally — confirmed working:
+# courseweave-hybrid index uses dotproduct metric — supports
+# sparse_vector natively. Pinecone fuses dense + sparse internally.
+# Confirmed working:
 #   Dense:  web_IE_1990 score 0.69
 #   Sparse: web_IE_1990 score 0.62
-#   Hybrid: web_IE_1990 score 1.31  (dense + sparse summed by Pinecone)
-# This is simpler, uses one API call instead of two, and leverages
-# Pinecone's native optimized fusion.
+#   Hybrid: web_IE_1990 score 1.31
 # ============================================================
 
 def run_hybrid_retrieval(
@@ -279,17 +323,11 @@ def run_hybrid_retrieval(
 ) -> list:
     """
     Native Pinecone hybrid search — dense + sparse in a single query.
-
-    Pinecone fuses dense (BGE HyDE vector) and sparse (BM25) scores
-    natively using the dotproduct index. Returns candidate_pool results
-    sorted by combined hybrid score.
-
     Falls back to dense-only if BM25 encoding fails.
     """
     hyde_vector     = query_output["hyde_vector"]
     rewritten_query = query_output["rewritten_query"]
 
-    # Build sparse vector — fall back to dense-only if BM25 fails
     sparse_vector = None
     try:
         sparse_vector = bm25_encoder.encode_queries(rewritten_query)
@@ -313,12 +351,11 @@ def run_hybrid_retrieval(
         mode = "hybrid" if sparse_vector is not None else "dense-only"
         logger.info("Pinecone %s search: %d results", mode, len(matches))
 
-        # Normalize to plain dicts with rrf_score key for downstream compat
         return [
             {
                 "id"       : m["id"],
                 "score"    : m["score"],
-                "rrf_score": m["score"],   # alias — cross-encoder uses rerank_score
+                "rrf_score": m["score"],
                 "metadata" : m.get("metadata", {}) or {}
             }
             for m in matches
@@ -330,34 +367,34 @@ def run_hybrid_retrieval(
 
 
 # ============================================================
-# STEP 5 — CROSS-ENCODER RE-RANKING (teammate + NoneType fix)
+# STEP 5 — CROSS-ENCODER RE-RANKING
 # ============================================================
 
 def rerank_candidates(
-    rewritten_query: str,
+    hyde_text: str,
     candidates: list,
     score_threshold: float = RERANK_SCORE_THRESHOLD
 ) -> list:
     """
-    Re-rank candidates using cross-encoder.
-    Falls back to RRF order if reranking fails.
+    Re-rank candidates using cross-encoder against the HyDE hypothesis text.
+    Falls back to retrieval score order if reranking fails.
 
-    FIX: Added `or ""` guard on metadata text to prevent NoneType
-    errors when course metadata has null/missing text field.
+    Uses hyde_text (natural language course description) rather than the
+    raw skill query — natural language scores much better against course
+    descriptions in the cross-encoder.
     """
     if not candidates:
         return []
 
-    # FIX: `or ""` prevents NoneType being passed to cross-encoder
     pairs = [
-        [rewritten_query, c.get("metadata", {}).get("text", "") or ""]
+        [hyde_text, c.get("metadata", {}).get("text", "") or ""]
         for c in candidates
     ]
 
     try:
         scores = cross_encoder.predict(pairs)
     except Exception as e:
-        logger.error("Cross-encoder scoring failed, using RRF order: %s", e)
+        logger.error("Cross-encoder scoring failed, using retrieval order: %s", e)
         return candidates
 
     scored = []
@@ -376,7 +413,7 @@ def rerank_candidates(
 
 
 # ============================================================
-# STEP 6 — CONTEXT ASSEMBLY + MMR DIVERSITY (teammate)
+# STEP 6 — CONTEXT ASSEMBLY + MMR DIVERSITY
 # ============================================================
 
 def fetch_parent_chunk(course_code: str) -> str:
@@ -434,10 +471,8 @@ def mmr_diversity(
 ) -> list:
     """
     Maximal Marginal Relevance diversity filtering.
-    Balances relevance vs diversity, penalizing overlap with
+    Balances relevance vs diversity, penalising overlap with
     already-selected results AND completed courses from Postgres.
-
-    lambda_param: 1.0 = pure relevance, 0.0 = pure diversity.
     """
     if not candidates:
         return []
@@ -491,10 +526,9 @@ def run_context_assembly(reranked: list, student_context: dict, top_k: int) -> l
     Full context assembly:
     1. Enrich PDF chunks with parent context
     2. Deduplicate (one chunk per course)
-    3. MMR diversity filtering using completed_courses from Postgres
+    3. MMR diversity filtering
 
-    FIX: If MMR returns empty (edge case with all zero scores),
-    falls back to deduped order to ensure pipeline always returns results.
+    Falls back to deduped order if MMR returns empty.
     """
     completed_courses = student_context.get("completed_courses", [])
 
@@ -517,7 +551,6 @@ def run_context_assembly(reranked: list, student_context: dict, top_k: int) -> l
 
     diverse = mmr_diversity(deduped, completed_courses, top_k=top_k)
 
-    # FIX: fallback if MMR returns empty
     if not diverse and deduped:
         logger.warning("MMR returned empty — falling back to deduped order")
         diverse = deduped[:top_k]
@@ -526,11 +559,10 @@ def run_context_assembly(reranked: list, student_context: dict, top_k: int) -> l
 
 
 # ============================================================
-# STEP 7 — GUARDRAILS (merged: teammate + our completed check)
+# STEP 7 — GUARDRAILS
 # ============================================================
 
 def normalize_course_code(code: str) -> str:
-    """Normalize course code — no space, uppercase."""
     return code.replace(" ", "").upper().strip()
 
 
@@ -542,14 +574,11 @@ def apply_guardrails(
     """
     Final guardrails before returning results.
 
-    Two checks (merged from both sides):
-    1. Eligibility filter — course must be in eligible_courses from Postgres
-    2. Completed check   — course must NOT be in completed_courses (hard guardrail)
-
-    Also normalizes course codes and formats output to match contract.
+    1. Course must be in eligible_courses from Postgres
+    2. Course must NOT be in completed_courses (hard stop)
     """
-    eligible_courses    = student_context.get("eligible_courses", [])
-    completed_courses   = student_context.get("completed_courses", [])
+    eligible_courses  = student_context.get("eligible_courses", [])
+    completed_courses = student_context.get("completed_courses", [])
 
     eligible_normalized  = {normalize_course_code(c) for c in eligible_courses}
     completed_normalized = {normalize_course_code(c) for c in completed_courses}
@@ -561,12 +590,10 @@ def apply_guardrails(
         raw_code  = meta.get("course_code", "")
         norm_code = normalize_course_code(raw_code)
 
-        # Guardrail 1: must be in eligible courses
         if norm_code not in eligible_normalized:
             logger.debug("Dropping %s — not in eligible courses", norm_code)
             continue
 
-        # Guardrail 2: must NOT be completed (hard stop)
         if norm_code in completed_normalized:
             logger.warning(
                 "Guardrail triggered: %s is completed but appeared in results",
@@ -605,24 +632,20 @@ def apply_guardrails(
 def get_relevant_courses(
     query:           str,
     student_context: dict,
-    top_k:           int = 3
+    top_k:           int = 3,
+    career_goal:     str = None,
 ) -> list[dict]:
     """
     Full RAG retrieval pipeline.
 
-    Contract (unchanged):
-        Input:  query (str), student_context (dict), top_k (int)
-        Output: list of dicts with keys:
-                course_code, course_name, score, source, text, metadata
+    Args:
+        query:           Skill query string from query_builder.build_query()
+        student_context: Student context dict from postgres_filter.get_student_context()
+        top_k:           Number of courses to return
+        career_goal:     Career name — used for HyDE cache lookup.
+                         Always pass this from recommendation_agent.py.
 
-    Pipeline:
-        1. Query rewriting + HyDE
-        2. Metadata pre-filter
-        3. Hybrid retrieval (dense + sparse, sparse gracefully skipped if unsupported)
-        4. RRF fusion
-        5. Cross-encoder re-ranking
-        6. Context assembly + MMR diversity
-        7. Guardrails (eligible + completed check)
+    Returns list of dicts: course_code, course_name, score, source, text, metadata
     """
     eligible_courses = student_context.get("eligible_courses", [])
 
@@ -631,7 +654,7 @@ def get_relevant_courses(
         return []
 
     try:
-        query_output     = run_query_layer(query)
+        query_output     = get_hyde_output(query, career_goal=career_goal)
         pinecone_filter  = build_pinecone_filter(student_context)
         fused_candidates = run_hybrid_retrieval(
             query_output, pinecone_filter, candidate_pool=CANDIDATE_POOL
@@ -646,19 +669,22 @@ def get_relevant_courses(
         final     = apply_guardrails(assembled, student_context, top_k=top_k)
 
         logger.info(
-            "Pipeline complete — %d results for query: '%s...'",
-            len(final), query[:50]
+            "Pipeline complete — %d results for '%s' (cache_hit=%s)",
+            len(final), career_goal or query[:40], query_output.get("cache_hit")
         )
         return final
 
     except Exception as e:
         import traceback
-        logger.error("Pipeline failed for query '%s': %s\n%s", query[:50], e, traceback.format_exc())
+        logger.error(
+            "Pipeline failed for query '%s': %s\n%s",
+            query[:50], e, traceback.format_exc()
+        )
         return []
 
 
 # ============================================================
-# TEST BLOCK — uses real Postgres data
+# TEST BLOCK
 # ============================================================
 
 if __name__ == "__main__":
@@ -669,9 +695,9 @@ if __name__ == "__main__":
     from src.models.postgres_filter import get_student_context
     from src.models.query_builder import build_query
 
-    print("\n=== Testing retriever.py (full RAG pipeline) ===\n")
+    print("\n=== Testing retriever.py (HyDE-cached pipeline) ===\n")
+    print(f"HyDE cache built for: {list(hyde_cache.keys())}\n")
 
-    # Aisha Patel — MS_DAE, Data Engineer
     context = get_student_context(1)
     print(f"Student:    {context['name']}")
     print(f"Career:     {context['target_career']}")
@@ -682,7 +708,9 @@ if __name__ == "__main__":
     query        = query_result["skill_query"]
     print(f"\nQuery: {query[:100]}...\n")
 
-    results = get_relevant_courses(query, context, top_k=3)
+    results = get_relevant_courses(
+        query, context, top_k=3, career_goal=context["target_career"]
+    )
 
     if results:
         print(f"\n--- Top {len(results)} Results ---")

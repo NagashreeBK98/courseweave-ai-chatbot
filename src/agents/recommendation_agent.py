@@ -165,16 +165,18 @@ RETRIEVED COURSES (you may ONLY recommend from this list):
 
 YOUR TASK:
 Write a friendly, conversational recommendation for {student_context['name']}.
+- Organize the courses into a realistic semester plan based on their {credits_left} credits remaining
+  (assume ~8 credits / semester = 2 courses per semester, semesters labeled "Semester 1", "Semester 2", etc.)
+- Start with core courses if any remain — these MUST come first
+- Then fill remaining semesters with relevant electives from the retrieved list
 - Explain why each course fits their {career_goal} goal specifically
-- Reference their credit progress naturally — e.g. "you're {credits_done} credits in, {credits_left} to go"
-- If they still have core courses left, emphasize finishing those first
-- If a course has unmet prerequisites, clearly tell them what to take first
+- If a course has unmet prerequisites, slot it AFTER its prerequisite in the plan
 - Be warm and encouraging — like a real advisor who knows their full situation
 
 STRICT RULES:
 - Only recommend courses from the retrieved list above
 - Never invent course names or codes
-- Keep response under 320 words
+- Keep response under 400 words
 - Do not repeat all the profile data back verbatim
 - Focus on WHY each course matters for their specific career goal and degree progress
 """
@@ -347,6 +349,13 @@ def generate_recommendation(
     query_result  = build_query(career_goal)
     query         = query_result["skill_query"]
     career_skills = query_result["career_skills"]
+
+    # ── Step 4b: Dynamic top_k based on credits remaining ────────────────────
+    # Each course = 4 credits. Show enough courses to fill remaining semesters,
+    # capped at 6 to keep the response readable. Minimum 3.
+    credits_remaining = degree_audit.get("credits_remaining", 32)
+    top_k = max(3, min(credits_remaining // 4, 6))
+    logger.info("Dynamic top_k=%d based on %d credits remaining", top_k, credits_remaining)
 
     # ── Step 5: Retrieve from Pinecone ───────────────────────────────────────
     logger.info("Step 5: Retrieving courses from Pinecone")
