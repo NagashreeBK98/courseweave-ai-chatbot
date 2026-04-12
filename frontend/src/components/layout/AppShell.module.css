@@ -198,6 +198,16 @@
   border: 1px solid var(--accent-border);
 }
 
+.trackTag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--success);
+  background: var(--success-light);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--success-border);
+}
+
 .themeToggle {
   width: 32px;
   height: 32px;

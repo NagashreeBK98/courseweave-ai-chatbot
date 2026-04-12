@@ -89,6 +89,11 @@ export default function AppShell() {
           </div>
           <div className={styles.topRight}>
             <span className={styles.programTag}>{student?.program_code}</span>
+            {student?.degree_path && (
+              <span className={styles.trackTag}>
+                {student.degree_path.charAt(0).toUpperCase() + student.degree_path.slice(1)} track
+              </span>
+            )}
             <button
               className={styles.themeToggle}
               onClick={toggleTheme}
