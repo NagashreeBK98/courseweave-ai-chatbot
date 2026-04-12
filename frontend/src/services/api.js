@@ -27,13 +27,13 @@ export const authApi = {
 }
 
 export const studentApi = {
-  dashboard:       () => api.get('/student/dashboard'),
-  courses:         () => api.get('/student/courses'),
+  prerequisites:   () => api.get('/student/prerequisites'),
+  addCourse:       (data) => api.post('/student/courses', data),
   addCoursesBatch: (data) => api.post('/student/courses/batch', data),
   getProfile:      ()     => api.get('/student/profile'),
   updateProfile:   (data) => api.put('/student/profile', data),
-  prerequisites:   () => api.get('/student/prerequisites'),
-  addCourse:    (data)       => api.post('/student/courses', data),
+  dashboard:    ()           => api.get('/student/dashboard'),
+  courses:      ()           => api.get('/student/courses'),
   removeCourse: (courseCode) => api.delete(`/student/courses/${courseCode}`),
   roadmap:      ()           => api.get('/student/roadmap'),
 }
