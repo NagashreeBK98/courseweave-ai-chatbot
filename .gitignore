@@ -15,3 +15,4 @@ logs/
 
 # Generated auth file
 simple_auth_manager_passwords.json.generated
+frontend/node_modules/
