@@ -325,6 +325,26 @@ def run_hybrid_retrieval(
         ]
 
     except Exception as e:
+        # If sparse vector is not supported by the index, retry with dense-only
+        if sparse_vector is not None and "sparse" in str(e).lower():
+            logger.warning("Index does not support sparse vectors — retrying dense-only: %s", e)
+            dense_params = {k: v for k, v in query_params.items() if k != "sparse_vector"}
+            try:
+                response = index.query(**dense_params)
+                matches  = response.get("matches", [])
+                logger.info("Pinecone dense-only search: %d results", len(matches))
+                return [
+                    {
+                        "id"       : m["id"],
+                        "score"    : m["score"],
+                        "rrf_score": m["score"],
+                        "metadata" : m.get("metadata", {}) or {}
+                    }
+                    for m in matches
+                ]
+            except Exception as e2:
+                logger.error("Dense-only retrieval also failed: %s", e2)
+                return []
         logger.error("Hybrid retrieval failed: %s", e)
         return []
 

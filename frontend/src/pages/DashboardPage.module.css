@@ -2,13 +2,31 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   gap: 16px;
   flex-wrap: wrap;
 }
 
 .welcomeTitle { font-size: 22px; font-weight: 600; color: var(--text-primary); }
 .welcomeSub { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+
+.ctaGroup { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.profileCta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background var(--transition), border-color var(--transition);
+}
+.profileCta:hover { background: var(--bg-secondary); border-color: var(--border-strong); }
 
 .advisorCta {
   display: flex;
@@ -28,11 +46,11 @@
 .statsGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
   margin-bottom: 20px;
 }
 
-.progressCard { margin-bottom: 28px; }
+.progressCard { margin-bottom: 24px; }
 .progressHeader { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .progressLabel { font-size: 13.5px; font-weight: 500; color: var(--text-primary); }
 .progressPct { font-size: 13.5px; font-weight: 600; color: var(--accent-text); }
@@ -41,6 +59,201 @@
 .progressMeta { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-tertiary); }
 
 .twoCol { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+
+/* ── Section wrapper ── */
+.section { margin-bottom: 24px; }
+
+/* ── Empty state ── */
+.emptyMsg { font-size: 13px; color: var(--text-tertiary); padding: 20px 0; text-align: center; }
+
+.emptyCard {
+  padding: 32px 24px;
+  text-align: center;
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border);
+}
+
+.emptyCard .emptyMsg {
+  padding: 0;
+  margin: 0;
+}
+
+.loadingCard {
+  padding: 32px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.loadingSpinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loadingCard .emptyMsg {
+  padding: 0;
+  margin: 0;
+}
+
+/* ── Table ── */
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  table-layout: fixed;
+}
+
+.table thead tr {
+  background: var(--bg-secondary);
+  border-bottom: 2px solid var(--border);
+}
+
+.table th {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 12px 12px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td { border-bottom: none; }
+
+.table tbody tr:hover { background: rgba(0, 0, 0, 0.02); }
+
+.table tbody tr {
+  transition: background 0.2s ease;
+}
+
+/* ── Column helpers ── */
+.center { text-align: center !important; }
+
+.semCell {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.nameCell {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.reasonCell {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  padding-right: 20px !important;
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-text);
+  background: var(--accent-light);
+  border: 1px solid var(--accent-border);
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  display: inline-block;
+  letter-spacing: 0.3px;
+}
+
+.dash { color: var(--text-tertiary); }
+
+/* ── Detail expand row ── */
+.rowOpen td { background: var(--bg-secondary); }
+
+.detailBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--accent-text);
+  background: var(--accent-light);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 9px;
+  transition: background var(--transition);
+  white-space: nowrap;
+}
+.detailBtn:hover { background: var(--accent-border); }
+
+.viewDetailsBtn {
+  display: inline-block;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.viewDetailsBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.detailRow td {
+  background: var(--bg-secondary);
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.detailBox {
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent);
+  margin: 6px 12px 10px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--bg-card);
+}
+
+.reason {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin-bottom: 8px;
+}
+
+.detailMeta {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
 
 .seeAll {
   display: flex;
@@ -109,6 +322,42 @@
 }
 .quickLink:hover { background: var(--bg-secondary); color: var(--text-primary); }
 
+/* ── Semester recommendations section ── */
+.semRecsSection { margin-top: 32px; }
+
+.recMain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  cursor: pointer;
+  gap: 12px;
+}
+
+.detailsBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--accent-text);
+  background: var(--accent-light);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  transition: background var(--transition);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.detailsBtn:hover { background: var(--accent-border); }
+
+.recDetail {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.recReason  { font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 8px; }
+.recMetaRow { display: flex; gap: 16px; font-size: 12px; color: var(--text-tertiary); }
+
 @media (max-width: 1100px) {
   .statsGrid { grid-template-columns: repeat(2, 1fr); }
 }
@@ -117,4 +366,6 @@
 }
 @media (max-width: 600px) {
   .statsGrid { grid-template-columns: repeat(2, 1fr); }
+  .ctaGroup { width: 100%; }
+  .profileCta, .advisorCta { flex: 1; justify-content: center; }
 }

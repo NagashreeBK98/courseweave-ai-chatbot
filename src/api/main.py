@@ -94,6 +94,50 @@ class AddCourseRequest(BaseModel):
     grade: str
     completed_at: str
 
+class StudentProfileRequest(BaseModel):
+    intake_month: Optional[str] = None
+    intake_year: Optional[int] = None
+    grad_month: Optional[str] = None
+    grad_year: Optional[int] = None
+    current_term: Optional[str] = None
+    planning_semester: Optional[str] = None
+    manual_gpa: Optional[float] = None
+
+class BatchCourseItem(BaseModel):
+    course_code: str
+    grade: str
+    semester: str
+    course_name: Optional[str] = None
+    credits: Optional[int] = 4
+
+class BatchCoursesRequest(BaseModel):
+    courses: List[BatchCourseItem]
+
+
+# ── DB migration on startup ──────────────────────────────────────────────────
+
+@app.on_event("startup")
+def run_migrations():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        for sql in [
+            "ALTER TABLE students ADD COLUMN IF NOT EXISTS intake_month VARCHAR(5)",
+            "ALTER TABLE students ADD COLUMN IF NOT EXISTS intake_year INT",
+            "ALTER TABLE students ADD COLUMN IF NOT EXISTS grad_month VARCHAR(10)",
+            "ALTER TABLE students ADD COLUMN IF NOT EXISTS grad_year INT",
+            "ALTER TABLE students ADD COLUMN IF NOT EXISTS current_term VARCHAR(20)",
+            "ALTER TABLE students ADD COLUMN IF NOT EXISTS planning_semester VARCHAR(20)",
+            "ALTER TABLE students ADD COLUMN IF NOT EXISTS manual_gpa FLOAT",
+            "ALTER TABLE student_courses ADD COLUMN IF NOT EXISTS semester VARCHAR(20)",
+        ]:
+            cur.execute(sql)
+        conn.commit()
+        conn.close()
+        logger.info("DB migrations complete")
+    except Exception as e:
+        logger.error("Migration error: %s", e)
+
 
 # ── Auth endpoints ───────────────────────────────────────────────────────────
 
@@ -175,7 +219,9 @@ def dashboard(user=Depends(verify_token)):
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         cur.execute(
-            """SELECT s.id, s.name, s.email, s.program_code, s.target_career
+            """SELECT s.id, s.name, s.email, s.program_code, s.target_career,
+                      s.intake_month, s.intake_year, s.grad_month, s.grad_year,
+                      s.current_term, s.planning_semester, s.manual_gpa
                FROM students s WHERE s.id = %s""",
             (sid,),
         )
@@ -183,7 +229,7 @@ def dashboard(user=Depends(verify_token)):
 
         cur.execute(
             """SELECT sc.course_code, c.course_name, c.credits, c.course_type,
-                      sc.grade, sc.completed_at
+                      sc.grade, sc.completed_at, sc.semester
                FROM student_courses sc
                JOIN courses c ON c.course_code = sc.course_code
                WHERE sc.student_id = %s
@@ -204,9 +250,9 @@ def dashboard(user=Depends(verify_token)):
         remaining = [dict(r) for r in cur.fetchall()]
 
         prog_map = {
-            "MS_DAE": 40, "MS_DS": 40, "MS_CS": 40, "MS_DA": 40, "MS_IS": 40
+            "MS_DAE": 32, "MS_DS": 32, "MS_CS": 32, "MS_DA": 32, "MS_IS": 32
         }
-        total_required = prog_map.get(student["program_code"], 40)
+        total_required = prog_map.get(student["program_code"], 32)
         credits_done = sum(c["credits"] for c in completed)
         credits_remaining = total_required - credits_done
 
@@ -323,6 +369,101 @@ def add_course(req: AddCourseRequest, user=Depends(verify_token)):
         raise HTTPException(500, detail=str(e))
 
 
+# ── Student profile update ───────────────────────────────────────────────────
+
+@app.put("/student/profile")
+def update_profile(req: StudentProfileRequest, user=Depends(verify_token)):
+    sid = user["student_id"]
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            """UPDATE students SET
+               intake_month = COALESCE(%s, intake_month),
+               intake_year = COALESCE(%s, intake_year),
+               grad_month = COALESCE(%s, grad_month),
+               grad_year = COALESCE(%s, grad_year),
+               current_term = COALESCE(%s, current_term),
+               planning_semester = COALESCE(%s, planning_semester),
+               manual_gpa = COALESCE(%s, manual_gpa)
+               WHERE id = %s""",
+            (req.intake_month, req.intake_year, req.grad_month, req.grad_year,
+             req.current_term, req.planning_semester, req.manual_gpa, sid),
+        )
+        conn.commit()
+        conn.close()
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))
+
+
+@app.get("/student/profile")
+def get_profile(user=Depends(verify_token)):
+    sid = user["student_id"]
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """SELECT intake_month, intake_year, grad_month, grad_year,
+                      current_term, planning_semester, manual_gpa
+               FROM students WHERE id = %s""",
+            (sid,),
+        )
+        row = cur.fetchone()
+        conn.close()
+        return dict(row) if row else {}
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))
+
+
+# ── Batch course add ─────────────────────────────────────────────────────────
+
+def _semester_to_date(semester: str) -> str:
+    parts = semester.split(" ")
+    sem_type, year = parts[0], parts[1] if len(parts) > 1 else "2024"
+    if sem_type == "Spring":  return f"{year}-05-15"
+    if sem_type == "Summer":  return f"{year}-08-15"
+    return f"{year}-12-15"
+
+@app.post("/student/courses/batch")
+def add_courses_batch(req: BatchCoursesRequest, user=Depends(verify_token)):
+    sid = user["student_id"]
+    added, skipped = 0, 0
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        for item in req.courses:
+            # Ensure course exists in courses table (for manual entries)
+            cur.execute("SELECT course_code FROM courses WHERE course_code = %s", (item.course_code,))
+            if not cur.fetchone():
+                if not item.course_name:
+                    skipped += 1
+                    continue
+                cur.execute(
+                    "INSERT INTO courses (course_code, course_name, credits, program_code, course_type) "
+                    "SELECT %s, %s, %s, program_code, 'Elective' FROM students WHERE id = %s "
+                    "ON CONFLICT (course_code) DO NOTHING",
+                    (item.course_code, item.course_name, item.credits or 4, sid),
+                )
+
+            completed_at = _semester_to_date(item.semester)
+            cur.execute(
+                """INSERT INTO student_courses (student_id, course_code, grade, completed_at, semester)
+                   VALUES (%s, %s, %s, %s, %s)
+                   ON CONFLICT (student_id, course_code) DO UPDATE
+                   SET grade = EXCLUDED.grade, semester = EXCLUDED.semester""",
+                (sid, item.course_code, item.grade, completed_at, item.semester),
+            )
+            added += 1
+
+        conn.commit()
+        conn.close()
+        return {"added": added, "skipped": skipped}
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))
+
+
 # ── Prerequisites checker ────────────────────────────────────────────────────
 
 @app.get("/student/prerequisites")
@@ -369,6 +510,76 @@ def check_prerequisites(user=Depends(verify_token)):
         conn.close()
         return result
     except Exception as e:
+        raise HTTPException(500, detail=str(e))
+
+
+# ── Course details ────────────────────────────────────────────────────────────
+
+@app.get("/courses/{course_code}/details")
+def get_course_details(course_code: str, user=Depends(verify_token)):
+    """Get detailed information about a specific course including syllabus from Pinecone."""
+    try:
+        from src.models.retriever import fetch_parent_chunk, gemini_client
+
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Get course basic info from DB
+        cur.execute(
+            """SELECT course_code, course_name, credits, course_type, description,
+                      learning_outcomes, prerequisites
+               FROM courses WHERE course_code = %s""",
+            (course_code,),
+        )
+        course = cur.fetchone()
+
+        if not course:
+            raise HTTPException(404, detail="Course not found")
+
+        course_dict = dict(course)
+
+        # Fetch syllabus content from Pinecone
+        syllabus_text = fetch_parent_chunk(course_code)
+
+        # Generate AI summary using Gemini
+        if syllabus_text:
+            prompt = f"""Based on this course syllabus for {course_code} - {course_dict['course_name']},
+provide a concise, well-formatted summary covering:
+
+1. Course Overview (2-3 sentences about what this course teaches)
+2. Key Topics Covered (bullet points)
+3. Learning Outcomes (what students will be able to do)
+4. Prerequisites (if any are mentioned)
+
+Syllabus content:
+{syllabus_text[:3000]}
+
+Format your response with clear headings and bullet points for easy reading."""
+
+            try:
+                response = gemini_client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=prompt
+                )
+                ai_summary = response.text
+            except Exception as e:
+                logger.warning(f"Gemini generation failed: {e}")
+                ai_summary = "AI summary currently unavailable."
+        else:
+            ai_summary = "Detailed syllabus information not available for this course."
+            syllabus_text = ""
+
+        conn.close()
+
+        return {
+            **course_dict,
+            "syllabus_text": syllabus_text[:2000] if syllabus_text else "",
+            "ai_summary": ai_summary
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching course details: {e}")
         raise HTTPException(500, detail=str(e))
 
 
@@ -523,6 +734,22 @@ def recommend(req: RecommendRequest, user=Depends(verify_token)):
         if "error" in result:
             raise HTTPException(500, detail=result["error"])
 
+        # Enrich courses with credits and course_type from DB
+        if result.get("courses"):
+            course_codes = [c["course_code"] for c in result["courses"]]
+            if course_codes:
+                placeholders = ",".join(["%s"] * len(course_codes))
+                cur.execute(
+                    f"SELECT course_code, credits, course_type FROM courses WHERE course_code IN ({placeholders})",
+                    course_codes
+                )
+                course_info = {row["course_code"]: {"credits": row["credits"], "course_type": row["course_type"]} for row in cur.fetchall()}
+
+                for course in result["courses"]:
+                    info = course_info.get(course["course_code"], {})
+                    course["credits"] = info.get("credits", 4)
+                    course["course_type"] = info.get("course_type", "Elective")
+
         # Save bot response
         if conv_id:
             cur.execute(
@@ -531,6 +758,7 @@ def recommend(req: RecommendRequest, user=Depends(verify_token)):
             )
             cur.execute("UPDATE conversations SET updated_at = NOW() WHERE id = %s", (conv_id,))
 
+        conn.commit()
         conn.close()
         result["conversation_id"] = conv_id
         return result
