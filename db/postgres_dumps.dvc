@@ -1,6 +1,6 @@
 outs:
-- md5: 50df2b8d21751f184ade8f568736ddb5.dir
-  size: 68769
+- md5: 2b964b2a65c24da77d1790e9853626fa.dir
+  size: 76770
   nfiles: 1
   hash: md5
   path: postgres_dumps
