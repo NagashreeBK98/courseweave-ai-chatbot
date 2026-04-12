@@ -41,6 +41,7 @@ def register_student(
     password: str,
     program_code: str,
     target_career: str,
+    degree_path: str = None,
 ) -> dict:
     """
     Insert new student into Postgres, then trigger the recommendation pipeline.
@@ -56,6 +57,7 @@ def register_student(
         Exception                        for any other DB error
     """
     hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    degree_path = degree_path or 'coursework'
 
     # ── Layer 2: Postgres INSERT ─────────────────────────────────────────────
     logger.info("Registering student: %s (%s)", email, program_code)
@@ -63,11 +65,11 @@ def register_student(
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
         """
-        INSERT INTO students (name, email, program_code, target_career, password_hash)
-        VALUES (%s, %s, %s, %s, %s)
-        RETURNING id, name, email, program_code, target_career
+        INSERT INTO students (name, email, program_code, target_career, password_hash, degree_path)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id, name, email, program_code, target_career, degree_path
         """,
-        (name, email, program_code, target_career, hashed),
+        (name, email, program_code, target_career, hashed, degree_path),
     )
     student = dict(cur.fetchone())
     conn.close()
