@@ -1,0 +1,201 @@
+{
+  "generated_at": "2026-04-11T22:37:42.251558+00:00",
+  "careers": {
+    "data_engineer": {
+      "source": "adzuna_api + gemini_enrichment",
+      "scraped_at": "2026-04-11T22:37:19.775299+00:00",
+      "postings_analyzed": 20,
+      "adzuna_raw_skills": [
+        "AWS",
+        "ETL",
+        "Python",
+        "R",
+        "SQL",
+        "data pipelines",
+        "feature engineering",
+        "machine learning"
+      ],
+      "core_skills": [
+        "ETL",
+        "Python",
+        "SQL",
+        "data pipelines",
+        "Data Modeling",
+        "Data Warehousing",
+        "Version Control"
+      ],
+      "tools": [
+        "AWS",
+        "Apache Spark",
+        "Apache Kafka",
+        "Git",
+        "Apache Airflow",
+        "GCP",
+        "Azure"
+      ],
+      "nice_to_have": [
+        "R",
+        "feature engineering",
+        "machine learning",
+        "NoSQL Databases",
+        "Data Governance"
+      ],
+      "llm_additions": [
+        "Data Modeling",
+        "Data Warehousing",
+        "Version Control",
+        "Apache Spark",
+        "Apache Kafka",
+        "Git",
+        "Apache Airflow",
+        "GCP",
+        "Azure",
+        "NoSQL Databases",
+        "Data Governance"
+      ]
+    },
+    "data_scientist": {
+      "source": "adzuna_api + gemini_enrichment",
+      "scraped_at": "2026-04-11T22:37:28.175199+00:00",
+      "postings_analyzed": 20,
+      "adzuna_raw_skills": [
+        "SQL",
+        "machine learning"
+      ],
+      "core_skills": [
+        "SQL",
+        "Machine Learning",
+        "Python",
+        "Statistics",
+        "Data Analysis",
+        "Data Visualization"
+      ],
+      "tools": [
+        "Pandas",
+        "NumPy",
+        "Scikit-learn",
+        "Git",
+        "Cloud Platforms (AWS/GCP/Azure)",
+        "TensorFlow/PyTorch"
+      ],
+      "nice_to_have": [
+        "R",
+        "Spark",
+        "Docker",
+        "MLOps",
+        "A/B Testing"
+      ],
+      "llm_additions": [
+        "Python",
+        "Statistics",
+        "Data Analysis",
+        "Data Visualization",
+        "Pandas",
+        "NumPy",
+        "Scikit-learn",
+        "Git",
+        "Cloud Platforms (AWS/GCP/Azure)",
+        "TensorFlow/PyTorch",
+        "R",
+        "Spark",
+        "Docker",
+        "MLOps",
+        "A/B Testing"
+      ]
+    },
+    "ml_engineer": {
+      "source": "adzuna_api + gemini_enrichment",
+      "scraped_at": "2026-04-11T22:37:35.711089+00:00",
+      "postings_analyzed": 20,
+      "adzuna_raw_skills": [
+        "API",
+        "AWS",
+        "Azure",
+        "Databricks",
+        "PyTorch",
+        "Python",
+        "R",
+        "TensorFlow",
+        "data pipelines",
+        "deep learning",
+        "machine learning",
+        "model deployment"
+      ],
+      "core_skills": [
+        "Python",
+        "machine learning",
+        "deep learning",
+        "data pipelines",
+        "model deployment",
+        "API",
+        "SQL",
+        "Git",
+        "Algorithms & Data Structures"
+      ],
+      "tools": [
+        "AWS",
+        "Azure",
+        "Databricks",
+        "PyTorch",
+        "TensorFlow",
+        "Docker",
+        "Kubernetes",
+        "Spark"
+      ],
+      "nice_to_have": [
+        "R",
+        "MLOps"
+      ],
+      "llm_additions": [
+        "SQL",
+        "Git",
+        "Docker",
+        "Kubernetes",
+        "Spark",
+        "MLOps",
+        "Algorithms & Data Structures"
+      ]
+    },
+    "data_analyst": {
+      "source": "adzuna_api + gemini_enrichment",
+      "scraped_at": "2026-04-11T22:37:42.251489+00:00",
+      "postings_analyzed": 20,
+      "adzuna_raw_skills": [
+        "Power BI",
+        "data modeling",
+        "data warehouse"
+      ],
+      "core_skills": [
+        "data modeling",
+        "data warehouse",
+        "SQL",
+        "Statistics",
+        "Python",
+        "ETL"
+      ],
+      "tools": [
+        "Power BI",
+        "Excel",
+        "Tableau"
+      ],
+      "nice_to_have": [
+        "R",
+        "A/B Testing",
+        "Cloud Platforms",
+        "Data Storytelling"
+      ],
+      "llm_additions": [
+        "SQL",
+        "Statistics",
+        "Python",
+        "ETL",
+        "Excel",
+        "Tableau",
+        "R",
+        "A/B Testing",
+        "Cloud Platforms",
+        "Data Storytelling"
+      ]
+    }
+  }
+}

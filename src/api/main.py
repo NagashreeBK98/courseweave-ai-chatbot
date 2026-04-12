@@ -78,6 +78,7 @@ class SignupRequest(BaseModel):
     password: str
     program_code: str
     target_career: str
+    degree_path: Optional[str] = None
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -91,8 +92,8 @@ class RecommendRequest(BaseModel):
 
 class AddCourseRequest(BaseModel):
     course_code: str
-    grade: str
-    completed_at: str
+    grade: Optional[str] = None
+    completed_at: Optional[str] = None
 
 class StudentProfileRequest(BaseModel):
     intake_month: Optional[str] = None
@@ -146,7 +147,7 @@ def signup(req: SignupRequest):
     if req.program_code not in PROGRAMS:
         raise HTTPException(400, detail=f"Invalid program. Choose from {PROGRAMS}")
     if req.target_career not in CAREERS:
-        raise HTTPException(400, detail=f"Invalid career. Choose from {CAREERS}")
+        raise HTTPException(400, detail=f"Please select a career from the supported options: {CAREERS}")
 
     try:
         from src.api.students import register_student
@@ -156,6 +157,7 @@ def signup(req: SignupRequest):
             password=req.password,
             program_code=req.program_code,
             target_career=req.target_career,
+            degree_path=req.degree_path or None,
         )
         student = result["student"]
         token = create_token(student["id"], student["email"])
@@ -199,7 +201,7 @@ def me(user=Depends(verify_token)):
         conn = get_db()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            "SELECT id, name, email, program_code, target_career, created_at FROM students WHERE id = %s",
+            "SELECT id, name, email, program_code, target_career, degree_path, created_at FROM students WHERE id = %s",
             (user["student_id"],),
         )
         student = dict(cur.fetchone())
@@ -350,16 +352,51 @@ def student_courses(user=Depends(verify_token)):
         raise HTTPException(500, detail=str(e))
 
 
+@app.delete("/student/courses/{course_code}")
+def remove_course(course_code: str, user=Depends(verify_token)):
+    sid = user["student_id"]
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM student_courses WHERE student_id = %s AND course_code = %s",
+            (sid, course_code)
+        )
+        cur.execute(
+            "DELETE FROM student_courses_roadmap_temp_addition WHERE student_id = %s AND course_code = %s",
+            (sid, course_code)
+        )
+        conn.close()
+        return {"deleted": True}
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))
+
+
 @app.post("/student/courses")
 def add_course(req: AddCourseRequest, user=Depends(verify_token)):
     sid = user["student_id"]
     try:
         conn = get_db()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(
-            "INSERT INTO student_courses (student_id, course_code, grade, completed_at) VALUES (%s,%s,%s,%s) RETURNING *",
-            (sid, req.course_code, req.grade, req.completed_at),
-        )
+
+        if req.completed_at:
+            # Course has a completion date → goes into student_courses (affects recommendations)
+            cur.execute(
+                "INSERT INTO student_courses (student_id, course_code, grade, completed_at) VALUES (%s,%s,%s,%s) RETURNING *",
+                (sid, req.course_code, req.grade or None, req.completed_at),
+            )
+            # Remove from temp table if it was planned there
+            cur.execute(
+                "DELETE FROM student_courses_roadmap_temp_addition WHERE student_id = %s AND course_code = %s",
+                (sid, req.course_code),
+            )
+        else:
+            # No date → roadmap planning only, isolated from recommendation engine
+            cur.execute(
+                "INSERT INTO student_courses_roadmap_temp_addition (student_id, course_code) VALUES (%s,%s) RETURNING *",
+                (sid, req.course_code),
+            )
+
         row = dict(cur.fetchone())
         conn.close()
         return row
@@ -477,7 +514,7 @@ def check_prerequisites(user=Depends(verify_token)):
         completed_codes = {r["course_code"] for r in cur.fetchall()}
 
         cur.execute("SELECT id, course_code FROM students WHERE id = %s", (sid,))
-        student = dict(cur.fetchone())
+        cur.fetchone()
 
         cur.execute(
             "SELECT course_code, course_name FROM courses WHERE program_code = (SELECT program_code FROM students WHERE id = %s) AND is_active = TRUE",
@@ -808,6 +845,27 @@ def roadmap(user=Depends(verify_token)):
         conn = get_db()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
+        # Student profile
+        cur.execute("SELECT program_code, degree_path FROM students WHERE id = %s", (sid,))
+        student = dict(cur.fetchone())
+        program_code = student["program_code"]
+        degree_path  = student.get("degree_path")
+
+        # Program requirements
+        cur.execute("SELECT * FROM program_requirements WHERE program_code = %s", (program_code,))
+        req = dict(cur.fetchone())
+        total_credits         = req["total_credits"]
+        core_credits_required = req["core_credits"]
+
+        # Elective credits depend on chosen degree path
+        if degree_path == "project":
+            elective_credits_required = req["project_elective_credits"]
+        elif degree_path == "thesis":
+            elective_credits_required = req["thesis_elective_credits"]
+        else:
+            elective_credits_required = req["elective_credits"]
+
+        # Completed courses — from student_courses (drives recommendation engine)
         cur.execute(
             """SELECT sc.course_code, c.course_name, c.credits, c.course_type,
                       sc.grade, sc.completed_at
@@ -817,40 +875,110 @@ def roadmap(user=Depends(verify_token)):
         )
         completed = [dict(r) for r in cur.fetchall()]
 
+        # Remove temp entries that now exist in student_courses (e.g. inserted by pipeline)
+        cur.execute(
+            """DELETE FROM student_courses_roadmap_temp_addition
+               WHERE student_id = %s
+               AND course_code IN (
+                   SELECT course_code FROM student_courses WHERE student_id = %s
+               )""",
+            (sid, sid),
+        )
+
+        # Planned courses — from isolated temp table, invisible to recommendation engine
+        cur.execute(
+            """SELECT t.course_code, c.course_name, c.credits, c.course_type,
+                      NULL AS grade, NULL AS completed_at
+               FROM student_courses_roadmap_temp_addition t
+               JOIN courses c ON c.course_code = t.course_code
+               WHERE t.student_id = %s ORDER BY t.created_at""",
+            (sid,),
+        )
+        student_planned = [dict(r) for r in cur.fetchall()]
+
+        completed_core_credits     = sum(c["credits"] for c in completed if c["course_type"] == "Core")
+        completed_elective_credits = sum(c["credits"] for c in completed if c["course_type"] == "Elective")
+        remaining_core_credits     = max(0, core_credits_required - completed_core_credits)
+        remaining_elective_credits = max(0, elective_credits_required - completed_elective_credits)
+
+        # All catalog courses not yet completed
         cur.execute(
             """SELECT c.course_code, c.course_name, c.credits, c.course_type
                FROM courses c
-               WHERE c.program_code = (SELECT program_code FROM students WHERE id = %s)
-               AND c.is_active = TRUE
-               AND c.course_code NOT IN (SELECT course_code FROM student_courses WHERE student_id = %s)
+               WHERE c.program_code = %s AND c.is_active = TRUE
+               AND c.course_code NOT IN (
+                   SELECT course_code FROM student_courses WHERE student_id = %s
+               )
                ORDER BY c.course_type, c.course_code""",
-            (sid, sid),
+            (program_code, sid),
         )
-        remaining = [dict(r) for r in cur.fetchall()]
+        all_remaining = [dict(r) for r in cur.fetchall()]
         conn.close()
 
+        # Only include courses needed to satisfy remaining degree requirements
+        planned = []
+        added_core = added_elective = 0
+
+        for c in all_remaining:
+            if c["course_type"] == "Core" and added_core < remaining_core_credits:
+                planned.append(c)
+                added_core += c["credits"]
+
+        for c in all_remaining:
+            if c["course_type"] == "Elective" and added_elective < remaining_elective_credits:
+                planned.append(c)
+                added_elective += c["credits"]
+
+        # Build semester blocks from completed courses (grouped by completion date)
         semesters = []
         if completed:
             dates = {}
             for c in completed:
                 key = str(c["completed_at"])
-                if key not in dates:
-                    dates[key] = []
-                dates[key].append(c)
-            for i, (date, courses) in enumerate(sorted(dates.items()), 1):
+                dates.setdefault(key, []).append(c)
+            for i, (_, courses) in enumerate(sorted(dates.items()), 1):
                 semesters.append({"label": f"Semester {i}", "status": "completed", "courses": courses})
 
+        # Current semester: student-added courses without a completion date
+        sem_num = len(semesters) + 1
+        semesters.append({
+            "label":   f"Semester {sem_num}",
+            "status":  "current",
+            "courses": student_planned,   # may be empty — frontend shows empty + slots
+        })
+
+        # Future planned semesters (empty slots for remaining requirements)
         chunk = 3
-        for i in range(0, len(remaining), chunk):
+        remaining_slots = len(planned)   # catalog courses still needed
+        for i in range(0, remaining_slots, chunk):
             sem_num = len(semesters) + 1
-            status = "current" if i == 0 else "planned"
             semesters.append({
-                "label": f"Semester {sem_num}",
-                "status": status,
-                "courses": remaining[i:i + chunk],
+                "label":   f"Semester {sem_num}",
+                "status":  "planned",
+                "courses": planned[i:i + chunk],
             })
 
-        return {"semesters": semesters}
+        credits_completed    = sum(c["credits"] for c in completed)
+        credits_in_progress  = sum(c["credits"] for c in student_planned)
+        credits_total_used   = credits_completed + credits_in_progress
+        credits_remaining    = max(0, total_credits - credits_total_used)
+
+        return {
+            "semesters": semesters,
+            "summary": {
+                "total_credits":              total_credits,
+                "credits_completed":          credits_completed,
+                "credits_in_progress":        credits_in_progress,
+                "credits_total_used":         credits_total_used,
+                "credits_remaining":          credits_remaining,
+                "core_credits_required":      core_credits_required,
+                "core_credits_completed":     completed_core_credits,
+                "core_credits_remaining":     remaining_core_credits,
+                "elective_credits_required":  elective_credits_required,
+                "elective_credits_completed": completed_elective_credits,
+                "elective_credits_remaining": remaining_elective_credits,
+            },
+        }
     except Exception as e:
         raise HTTPException(500, detail=str(e))
 
