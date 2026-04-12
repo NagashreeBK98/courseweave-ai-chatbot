@@ -9,6 +9,9 @@ import json
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
+mlflow = pytest.importorskip("mlflow", reason="mlflow not installed")
+
+
 def test_tracker_module_imports():
     """Test that the tracking module can be imported."""
     from src.tracking.mlflow_tracker import (
