@@ -421,8 +421,10 @@ def get_profile(user=Depends(verify_token)):
 def _semester_to_date(semester: str) -> str:
     parts = semester.split(" ")
     sem_type, year = parts[0], parts[1] if len(parts) > 1 else "2024"
-    if sem_type == "Spring":  return f"{year}-05-15"
-    if sem_type == "Summer":  return f"{year}-08-15"
+    if sem_type == "Spring":
+        return f"{year}-05-15"
+    if sem_type == "Summer":
+        return f"{year}-08-15"
     return f"{year}-12-15"
 
 @app.post("/student/courses/batch")
