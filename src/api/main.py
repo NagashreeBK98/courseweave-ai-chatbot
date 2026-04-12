@@ -102,7 +102,7 @@ def signup(req: SignupRequest):
     if req.program_code not in PROGRAMS:
         raise HTTPException(400, detail=f"Invalid program. Choose from {PROGRAMS}")
     if req.target_career not in CAREERS:
-        raise HTTPException(400, detail=f"Invalid career. Choose from {CAREERS}")
+        raise HTTPException(400, detail=f"Please select a career from the supported options: {CAREERS}")
 
     try:
         from src.api.students import register_student
