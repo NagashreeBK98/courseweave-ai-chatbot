@@ -115,7 +115,7 @@ def track_rag_query(
     """
     Tracking a RAG retrieval + LLM generation run.
     
-    We need to use this when testing different LLM configs, retrieval settings,
+    We need to use this when testing different LLM configurations, retrieval settings,
     or prompt templates to compare response quality.
     
     Args:

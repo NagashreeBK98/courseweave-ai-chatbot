@@ -1,0 +1,55 @@
+# CourseWeave AI — MLflow Experiment Tracking Configuration
+
+tracking:
+  server: "dagshub"
+  uri: "https://dagshub.com/SIDDHARTH107/courseweave-ai.mlflow"
+  repo_owner: "SIDDHARTH107"
+  repo_name: "courseweave-ai"
+
+experiments:
+  rag_evaluation:
+    name: "courseweave-rag-evaluation"
+    description: "RAG pipeline evaluation across 15 test cases"
+    metrics:
+      - avg_precision_at_3
+      - avg_recall_at_3
+      - guardrail_violations
+      - prereq_flag_accuracy
+      - pass_rate
+      - gemini_calls_total
+      - gemini_fallback_count
+
+  llm_comparison:
+    name: "courseweave-llm-comparison"
+    description: "Multi-LLM response quality comparison"
+    models:
+      - gemini_2_5_flash
+      - llama3_70b
+      - gpt4o_mini
+    metrics_per_model:
+      - latency_seconds
+      - response_length
+
+  embeddings:
+    name: "courseweave-embeddings-v2"
+    description: "Embedding model and chunking strategy comparison"
+
+  prompt_tuning:
+    name: "courseweave-prompt-tuning-v2"
+    description: "Prompt template version tracking"
+
+baseline:
+  date: "2026-03-24"
+  config:
+    embedding_model: "bge-small-en-v1.5"
+    top_k: 3
+    reranking: true
+    mmr: true
+    hyde: true
+    hybrid_search: true
+  results:
+    avg_precision_at_3: 0.4222
+    avg_recall_at_3: 0.4222
+    guardrail_violations: 0
+    prereq_flag_accuracy: 0.7778
+    pass_rate: 1.0
