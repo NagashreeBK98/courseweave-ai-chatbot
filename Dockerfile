@@ -7,12 +7,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml uv.lock* ./
-RUN pip install uv && uv sync --frozen --no-dev
+COPY requirements.txt ./
+RUN pip install uv && uv pip install -r requirements.txt --system
 
 COPY . .
 
-# Expose FastAPI default port (update if you use a different one)
-EXPOSE 8000
+# Cloud Run injects PORT at runtime — default to 8080
+EXPOSE 8080
 
-CMD ["uv", "run", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn src.api.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

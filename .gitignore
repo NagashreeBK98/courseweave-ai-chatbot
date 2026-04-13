@@ -1,4 +1,6 @@
-*.json
+# Ignore generated/sensitive JSON files but not project config
+data/careers.json
+configs/*.json
 gha-creds-*.json
 .env
 CLAUDE.md
