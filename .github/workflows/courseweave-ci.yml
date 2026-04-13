@@ -32,6 +32,14 @@ jobs:
       run: ruff check .
 
     - name: Run Unit Tests
+      env:
+        PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+        PINECONE_INDEX_NAME: ${{ secrets.PINECONE_INDEX_NAME }}
+        PGHOST: ${{ secrets.PGHOST }}
+        PGPORT: ${{ secrets.PGPORT }}
+        PGUSER: ${{ secrets.PGUSER }}
+        PGDATABASE: ${{ secrets.PGDATABASE }}
+        PG_PASSWORD: ${{ secrets.PG_PASSWORD }}
       run: pytest tests/unit -v
 
     # -------------------------------
