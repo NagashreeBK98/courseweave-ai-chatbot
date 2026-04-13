@@ -13,6 +13,9 @@ import logging
 import traceback
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from src.models.retriever import get_relevant_courses
+
+logging.getLogger("src.models.retriever").setLevel(logging.INFO)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -558,7 +561,9 @@ def check_prerequisites(user=Depends(verify_token)):
 def get_course_details(course_code: str, user=Depends(verify_token)):
     """Get detailed information about a specific course including syllabus from Pinecone."""
     try:
-        from src.models.retriever import fetch_parent_chunk, gemini_client
+        from src.models.retriever import fetch_parent_chunk
+        from groq import Groq
+        groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
         conn = get_db()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -596,11 +601,13 @@ Syllabus content:
 Format your response with clear headings and bullet points for easy reading."""
 
             try:
-                response = gemini_client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=prompt
-                )
-                ai_summary = response.text
+                response = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500,
+                temperature=0.3,
+                )   
+                ai_summary = response.choices[0].message.content.strip()
             except Exception as e:
                 logger.warning(f"Gemini generation failed: {e}")
                 ai_summary = "AI summary currently unavailable."

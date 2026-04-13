@@ -61,7 +61,7 @@ def gemini_generate(prompt: str, max_retries: int = 4) -> str:
     Backoff: 15s → 30s → 60s → 120s
     Raises exception only after all retries exhausted.
     """
-    delays = [15, 30, 60, 120]
+    delays = [7, 14, 28, 56]
 
     for attempt in range(max_retries):
         try:
