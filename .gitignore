@@ -1,4 +1,6 @@
-*.json
+# Ignore generated/sensitive JSON files but not project config
+# data/careers.json is now tracked in the repo
+configs/*.json
 gha-creds-*.json
 .env
 CLAUDE.md
