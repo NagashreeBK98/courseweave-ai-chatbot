@@ -158,7 +158,7 @@ export default function LandingPage() {
           </div>
           <div className={styles.footerRight}>
             <p>AI-powered academic planning for graduate students</p>
-            <p>© 2025 CourseWeave AI · Northeastern University</p>
+            <p>© 2026 CourseWeave AI · Northeastern University</p>
           </div>
         </div>
       </footer>

@@ -263,7 +263,7 @@ def test_gemini_generate_success(monkeypatch):
     mock_client.models.generate_content.return_value = mock_response
 
     import src.agents.recommendation_agent as ra
-    monkeypatch.setattr(ra, "gemini_client", mock_client)
+    monkeypatch.setattr(ra, "_gemini_client", mock_client)
 
     result = gemini_generate("test prompt")
     assert result == "Great recommendation!"
@@ -280,7 +280,7 @@ def test_gemini_generate_retries_on_429(monkeypatch):
     ]
 
     import src.agents.recommendation_agent as ra
-    monkeypatch.setattr(ra, "gemini_client", mock_client)
+    monkeypatch.setattr(ra, "_gemini_client", mock_client)
     monkeypatch.setattr(ra, "time", MagicMock())
 
     result = gemini_generate("test prompt", max_retries=4)
@@ -299,7 +299,7 @@ def test_gemini_generate_retries_on_resource_exhausted(monkeypatch):
     ]
 
     import src.agents.recommendation_agent as ra
-    monkeypatch.setattr(ra, "gemini_client", mock_client)
+    monkeypatch.setattr(ra, "_gemini_client", mock_client)
     monkeypatch.setattr(ra, "time", MagicMock())
 
     result = gemini_generate("test prompt", max_retries=4)
@@ -312,7 +312,7 @@ def test_gemini_generate_raises_after_all_retries_exhausted(monkeypatch):
     mock_client.models.generate_content.side_effect = Exception("429 quota exceeded")
 
     import src.agents.recommendation_agent as ra
-    monkeypatch.setattr(ra, "gemini_client", mock_client)
+    monkeypatch.setattr(ra, "_gemini_client", mock_client)
     monkeypatch.setattr(ra, "time", MagicMock())
 
     with pytest.raises(Exception, match="429"):
@@ -327,7 +327,7 @@ def test_gemini_generate_non_rate_limit_raises_immediately(monkeypatch):
     mock_client.models.generate_content.side_effect = ValueError("Invalid model name")
 
     import src.agents.recommendation_agent as ra
-    monkeypatch.setattr(ra, "gemini_client", mock_client)
+    monkeypatch.setattr(ra, "_gemini_client", mock_client)
 
     with pytest.raises(ValueError):
         gemini_generate("test prompt", max_retries=4)

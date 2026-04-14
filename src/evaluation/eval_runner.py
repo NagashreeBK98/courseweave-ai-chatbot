@@ -74,7 +74,7 @@ EVAL_RESULTS_PATH  = "data/eval_results.json"
 # Each test = 2 Gemini calls (rewrite + HyDE)
 # 15s sleep = ~4 tests/min = 8 Gemini calls/min (under 10 RPM)
 # Increase to 7s if you have quota increase approved (60 RPM)
-SLEEP_BETWEEN_TESTS = 15
+SLEEP_BETWEEN_TESTS = 7  # was 15, now 1 call per request so 7s is safe
 
 
 def load_eval_dataset() -> list[dict]:

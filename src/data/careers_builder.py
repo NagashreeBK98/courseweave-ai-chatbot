@@ -29,11 +29,17 @@ GCP_LOCATION      = os.getenv("GCP_LOCATION", "us-central1")
 GCS_BUCKET        = os.getenv("GCS_BUCKET")
 CAREERS_JSON_PATH = "data/careers.json"
 
-gemini_client = genai.Client(
-    vertexai=True,
-    project=GCP_PROJECT_ID,
-    location=GCP_LOCATION
-)
+_gemini_client = None
+
+def _get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(
+            vertexai=True,
+            project=GCP_PROJECT_ID,
+            location=GCP_LOCATION
+        )
+    return _gemini_client
 
 
 def enrich_with_gemini(career_key: str, raw_data: dict) -> dict:
@@ -83,7 +89,7 @@ Exactly this structure:
 """
 
     try:
-        response = gemini_client.models.generate_content(
+        response = _get_gemini_client().models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt
         )

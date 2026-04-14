@@ -1,0 +1,7 @@
+# MLflow Experiment Tracking Dependencies
+# We need to install with: pip install -r requirements-mlflow.txt
+
+mlflow>=3.0
+dagshub>=0.3.0
+python-dotenv>=1.0
+pyreadline3>=3.0;sys_platform=="win32"

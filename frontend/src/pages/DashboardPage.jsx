@@ -53,9 +53,11 @@ function CompletedTable({ rows }) {
 }
 
 /* ── Remaining courses table ── */
-function RemainingTable({ rows }) {
+function RemainingTable({ rows, hasProfile }) {
   if (rows.length === 0) return (
-    <p className={styles.emptyMsg}>🎉 All courses completed!</p>
+    <p className={styles.emptyMsg}>
+      {hasProfile ? '🎉 All courses completed!' : 'Set up your academic profile to see remaining courses.'}
+    </p>
   )
   return (
     <div className={styles.tableWrap}>
@@ -86,9 +88,13 @@ function RemainingTable({ rows }) {
 }
 
 /* ── Recommended courses table ── */
-function RecsTable({ rows }) {
+function RecsTable({ rows, hasProfile }) {
   if (rows.length === 0) return (
-    <p className={styles.emptyMsg}>🎉 All courses completed!</p>
+    <p className={styles.emptyMsg}>
+      {hasProfile
+        ? '🎉 All courses completed! You are ready to graduate.'
+        : 'No recommendations yet. Set up your academic profile so we can suggest the right courses for you.'}
+    </p>
   )
   return (
     <div className={styles.tableWrap}>
@@ -144,6 +150,7 @@ export default function DashboardPage() {
 
   const { student, stats, completed_courses, remaining_courses } = data
   const pct = stats.progress_pct
+  const hasProfile = completed_courses.length > 0
 
   // Get recommended courses: prioritize Core, then Electives
   const coreCourses = remaining_courses.filter(c => c.course_type === 'Core').slice(0, 5)
@@ -201,7 +208,7 @@ export default function DashboardPage() {
           title="Completed Courses"
           action={<Link to="/progress" className={styles.seeAll}>View all <ArrowRight size={12} /></Link>}
         />
-        <CompletedTable rows={completed_courses} />
+        <CompletedTable rows={completed_courses} hasProfile={hasProfile} />
       </div>
 
       {/* ── Recommended Next Courses ── */}
@@ -210,7 +217,7 @@ export default function DashboardPage() {
           title="Recommended Next Courses"
           action={<Link to="/advisor" className={styles.seeAll}>Get AI Picks <ArrowRight size={12} /></Link>}
         />
-        <RecsTable rows={recommendedCourses} />
+        <RecsTable rows={recommendedCourses} hasProfile={hasProfile} />
         <div className={styles.quickLinks}>
           <Link to="/roadmap" className={styles.quickLink}><TrendingUp size={14} /> View Roadmap</Link>
           <Link to="/catalog" className={styles.quickLink}><BookOpen size={14} /> Browse Catalog</Link>
