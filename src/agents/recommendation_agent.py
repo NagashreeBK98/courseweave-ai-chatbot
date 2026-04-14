@@ -42,8 +42,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
-GCP_LOCATION   = os.getenv("GCP_LOCATION", "us-central1")
+_gemini_client = None
 
 _gemini_client = None
 
@@ -53,8 +52,8 @@ def _get_gemini_client():
     if _gemini_client is None:
         _gemini_client = genai.Client(
             vertexai=True,
-            project=GCP_PROJECT_ID,
-            location=GCP_LOCATION
+            project=os.getenv("GCP_PROJECT_ID"),
+            location=os.getenv("GCP_LOCATION", "us-central1"),
         )
     return _gemini_client
 
@@ -376,6 +375,8 @@ def generate_recommendation(
             f"for your {degree_audit['program_name']}. "
             f"You're ready to graduate! 🎓"
         )
+
+        # Log the interaction
         log_interaction(
             student_id=student_id,
             student_name=student_context["name"],
@@ -413,6 +414,8 @@ def generate_recommendation(
                 f"Coursework (all electives), Project (IE 7945 + fewer electives), "
                 f"or Thesis (research + fewer electives). Which do you prefer?"
             )
+
+        # Log the interaction
         log_interaction(
             student_id=student_id,
             student_name=student_context["name"],
@@ -426,6 +429,7 @@ def generate_recommendation(
             action_taken="ask_path",
             response_time_sec=round(time.time() - start_time, 2)
         )
+
         return {
             "student":        student_context,
             "degree_audit":   degree_audit,
@@ -457,6 +461,8 @@ def generate_recommendation(
             f"I couldn't find relevant courses right now for "
             f"{student_context['name']}. Please try again shortly."
         )
+
+        # Log the interaction
         log_interaction(
             student_id=student_id,
             student_name=student_context["name"],
@@ -470,6 +476,7 @@ def generate_recommendation(
             action_taken="recommend",
             response_time_sec=round(time.time() - start_time, 2)
         )
+
         return {
             "student":        student_context,
             "degree_audit":   degree_audit,

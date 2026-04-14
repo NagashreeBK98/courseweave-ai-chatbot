@@ -19,7 +19,7 @@ Changes vs previous version:
        Saving: 1 Gemini call per every recommendation request, forever.
 
 Gemini calls per user action after these changes:
-    retriever.py at startup  :  6 calls  (once, builds HyDE cache)
+     retriever.py at startup  :  6 Groq calls  (once, builds HyDE cache)
     retriever.py per request :  0 calls  (cache hit every time)
     recommendation_agent.py  :  1 call   (the actual recommendation text)
     Total per request        :  1 call
@@ -48,7 +48,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from pinecone import Pinecone
 from pinecone_text.sparse import BM25Encoder
 from sentence_transformers import CrossEncoder
-from google import genai
+from groq import Groq
 
 load_dotenv()
 
@@ -143,18 +143,13 @@ def _init_cross_encoder():
     return model
 
 
-def _init_gemini():
-    logger.info("Initializing Gemini 2.5 Flash via Vertex AI...")
-    client = genai.Client(
-        vertexai=True,
-        project=GCP_PROJECT_ID,
-        location=GCP_LOCATION
-    )
-    logger.info("Gemini 2.5 Flash ready")
+def _init_groq():
+    logger.info("Initializing Groq client (Llama 3.3 70B) for HyDE generation...")
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    logger.info("Groq client ready")
     return client
 
-
-def _build_hyde_cache(careers: list, embedding_model, gemini_client) -> dict:
+def _build_hyde_cache(careers: list, embedding_model, groq_client) -> dict:
     """
     Pre-generate HyDE vectors for all supported career goals at startup.
 
@@ -186,11 +181,13 @@ def _build_hyde_cache(careers: list, embedding_model, gemini_client) -> dict:
         )
 
         try:
-            response   = gemini_client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt
+            response = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=150,
+                temperature=0.3,
             )
-            hypothesis = response.text.strip()
+            hypothesis = response.choices[0].message.content.strip()
             vector     = embedding_model.embed_query(hypothesis)
             cache[key] = {"vector": vector, "text": hypothesis}
             logger.info("HyDE cached for '%s' (%d chars)", career, len(hypothesis))
@@ -208,18 +205,36 @@ def _build_hyde_cache(careers: list, embedding_model, gemini_client) -> dict:
     return cache
 
 
-# ── Initialize all models and clients once at module load ──────────────────
+# ── Lazy initialization — models are loaded on first use, not at import time ──
+# This keeps `import src.models.retriever` side-effect-free (safe for CI, tests,
+# and any code that imports the module without needing live connections).
+# _ensure_initialized() is called automatically by get_relevant_courses() and
+# get_hyde_output() on first invocation.
 
-embedding_model = _init_embedding_model()
-pc, index       = _init_pinecone()
-bm25_encoder    = _init_bm25(index)
-cross_encoder   = _init_cross_encoder()
-gemini_client   = _init_gemini()
+embedding_model = None
+pc              = None
+index           = None
+bm25_encoder    = None
+cross_encoder   = None
+groq_client     = None
+hyde_cache: dict = {}
+_initialized    = False
 
-# 6 Gemini calls here at startup — zero per request after this
-hyde_cache = _build_hyde_cache(SUPPORTED_CAREERS, embedding_model, gemini_client)
 
-logger.info("All models, clients, and HyDE cache initialized — pipeline ready")
+def _ensure_initialized():
+    """Initialize all models and clients on first use."""
+    global _initialized, embedding_model, pc, index, bm25_encoder, cross_encoder, groq_client, hyde_cache
+    if _initialized:
+        return
+    embedding_model = _init_embedding_model()
+    pc, index       = _init_pinecone()
+    bm25_encoder    = _init_bm25(index)
+    cross_encoder   = _init_cross_encoder()
+    groq_client     = _init_groq()
+    # 6 Groq calls here once — zero per request after this
+    hyde_cache      = _build_hyde_cache(SUPPORTED_CAREERS, embedding_model, groq_client)
+    _initialized    = True
+    logger.info("All models, clients, and HyDE cache initialized — pipeline ready")
 
 
 # ============================================================
@@ -244,6 +259,8 @@ def get_hyde_output(query: str, career_goal: str = None) -> dict:
         career_goal: Career name passed from recommendation_agent.py.
                      Used as cache key. Always pass this.
     """
+    _ensure_initialized()
+
     if career_goal:
         key = career_goal.lower().strip()
         if key in hyde_cache:
@@ -667,6 +684,8 @@ def get_relevant_courses(
 
     Returns list of dicts: course_code, course_name, score, source, text, metadata
     """
+    _ensure_initialized()
+
     eligible_courses = student_context.get("eligible_courses", [])
 
     if not eligible_courses:
@@ -716,6 +735,7 @@ if __name__ == "__main__":
     from src.models.query_builder import build_query
 
     print("\n=== Testing retriever.py (HyDE-cached pipeline) ===\n")
+    _ensure_initialized()
     print(f"HyDE cache built for: {list(hyde_cache.keys())}\n")
 
     context = get_student_context(1)

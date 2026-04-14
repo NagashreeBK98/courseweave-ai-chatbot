@@ -7,7 +7,7 @@ This directory contains the complete data pipeline for CourseWeave AI, built usi
 ## 📁 Folder Structure
 
 ```
-Data-Pipeline/
+Data-Pipeline/ 
 ├── dags/
 │   └── pipeline_dag.py        # Master Airflow DAG — orchestrates all tasks
 ├── data/
