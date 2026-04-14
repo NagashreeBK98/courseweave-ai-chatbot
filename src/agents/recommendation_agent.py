@@ -42,14 +42,18 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
-GCP_LOCATION   = os.getenv("GCP_LOCATION", "us-central1")
+_gemini_client = None
 
-gemini_client = genai.Client(
-    vertexai=True,
-    project=GCP_PROJECT_ID,
-    location=GCP_LOCATION
-)
+def get_gemini_client():
+    """Lazily initialize Gemini client — avoids startup crash if Vertex AI is unreachable at import time."""
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(
+            vertexai=True,
+            project=os.getenv("GCP_PROJECT_ID"),
+            location=os.getenv("GCP_LOCATION", "us-central1"),
+        )
+    return _gemini_client
 
 
 def gemini_generate(prompt: str, max_retries: int = 4) -> str:
@@ -65,7 +69,7 @@ def gemini_generate(prompt: str, max_retries: int = 4) -> str:
 
     for attempt in range(max_retries):
         try:
-            response = gemini_client.models.generate_content(
+            response = get_gemini_client().models.generate_content(
                 model="gemini-2.5-flash",
                 contents=prompt
             )
