@@ -39,7 +39,7 @@ jobs:
 
       - name: Deploy backend to Cloud Run
         run: |
-          gcloud run deploy ${{ env.BACKEND_SERVICE }} --image ${{ env.BACKEND_IMAGE }} --region ${{ env.GCP_REGION }} --platform managed --allow-unauthenticated --memory 1Gi --cpu 1 --min-instances 0 --max-instances 3 --set-secrets="PINECONE_API_KEY=PINECONE_API_KEY:latest,DB_PASSWORD=DB_PASSWORD:latest,JWT_SECRET=JWT_SECRET:latest,ADZUNA_APP_KEY=ADZUNA_APP_KEY:latest,GROQ_API_KEY=GROQ_API_KEY:latest" --set-env-vars="GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},GCP_LOCATION=us-central1,DB_HOST=34.23.27.68,DB_PORT=5432,DB_NAME=courseweave,DB_USER=courseweave_user,PINECONE_INDEX_NAME=courseweave-hybrid,ADZUNA_APP_ID=0bfaed10,GCS_BUCKET=courseweave-ai-data,GOOGLE_APPLICATION_CREDENTIALS=/app/configs/course-urls.json"
+          gcloud run deploy ${{ env.BACKEND_SERVICE }} --image ${{ env.BACKEND_IMAGE }} --region ${{ env.GCP_REGION }} --platform managed --allow-unauthenticated --memory 1Gi --cpu 1 --min-instances 0 --max-instances 3 --set-secrets="PINECONE_API_KEY=PINECONE_API_KEY:latest,DB_PASSWORD=DB_PASSWORD:latest,JWT_SECRET=JWT_SECRET:latest,ADZUNA_APP_KEY=ADZUNA_APP_KEY:latest,GROQ_API_KEY=GROQ_API_KEY:latest" --set-env-vars="GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},GCP_LOCATION=us-central1,DB_HOST=34.23.27.68,DB_PORT=5432,DB_NAME=courseweave,DB_USER=courseweave_user,PINECONE_INDEX_NAME=courseweave-hybrid,ADZUNA_APP_ID=0bfaed10,GCS_BUCKET=courseweave-ai-data"
 
       - name: Print backend URL
         run: |
