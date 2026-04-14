@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>CourseWeave AI — Expo Poster</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800&display=swap');
+*{ margin:0; padding:0; box-sizing:border-box; }
+:root{
+  --red:#C8102E; --dark:#1a1916; --gray:#6b6860;
+  --light:#f8f7f4; --border:#e4e1d8; --white:#ffffff;
+}
+body{
+  font-family:'DM Sans',sans-serif;
+  background:#999;
+  display:flex; align-items:flex-start; justify-content:center;
+  padding:40px 20px;
+}
+
+/* ── POSTER: 11×17 portrait ── */
+.poster{
+  width:1056px;
+  background:var(--white);
+  display:flex; flex-direction:column;
+  box-shadow:0 16px 64px rgba(0,0,0,0.35);
+}
+
+/* ─── HEADER ─── */
+.header{
+  background:var(--dark);
+  padding:24px 44px;
+  display:flex; align-items:center; justify-content:space-between; gap:20px;
+  position:relative; overflow:hidden;
+}
+.header::before{
+  content:''; position:absolute; right:-80px; top:-80px;
+  width:300px; height:300px; border-radius:50%;
+  background:var(--red); opacity:0.10;
+}
+.header::after{
+  content:''; position:absolute; left:200px; bottom:-60px;
+  width:180px; height:180px; border-radius:50%;
+  background:var(--red); opacity:0.06;
+}
+.h-neu{ height:48px; width:auto; filter:brightness(0) invert(1); opacity:0.88; flex-shrink:0; }
+.h-center{ flex:1; text-align:center; position:relative; z-index:1; }
+.h-center h1{ font-size:38px; font-weight:800; color:white; letter-spacing:-1.5px; line-height:1; margin-bottom:5px; }
+.h-center h1 span{ color:var(--red); }
+.h-center .h-sub{ font-size:13px; color:rgba(255,255,255,0.5); letter-spacing:0.03em; }
+.h-cw{ height:68px; width:auto; filter:brightness(0) invert(1); opacity:0.9; flex-shrink:0; }
+
+/* ─── TAGLINE BAND ─── */
+.band{
+  background:var(--red);
+  padding:10px 44px;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.band-left{ font-size:14px; font-weight:600; color:white; font-style:italic; letter-spacing:0.01em; }
+.band-pills{ display:flex; gap:8px; }
+.band-pill{
+  background:rgba(255,255,255,0.18); color:white;
+  font-size:10px; font-weight:700; padding:4px 12px;
+  border-radius:999px; letter-spacing:0.05em; text-transform:uppercase;
+}
+
+/* ─── COLUMNS ─── */
+.cols{ display:grid; grid-template-columns:1fr 2fr; flex:1; }
+.col{
+  padding:24px 26px;
+  display:flex; flex-direction:column; gap:18px;
+  border-right:1px solid var(--border);
+}
+
+/* Right side: arch on top, two sub-cols below */
+.col-right{
+  display:flex; flex-direction:column;
+}
+.arch-section{
+  padding:22px 26px 18px;
+  border-bottom:1px solid var(--border);
+  background:white;
+}
+.subcols{
+  display:grid; grid-template-columns:1fr 1fr; flex:1;
+}
+.subcol{
+  padding:18px 22px;
+  display:flex; flex-direction:column; gap:14px;
+}
+.subcol.mid{ background:var(--light); border-right:1px solid var(--border); }
+
+/* ─── BLOCK ─── */
+.blk{ display:flex; flex-direction:column; gap:8px; }
+.blk-tag{ font-size:9px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; color:var(--red); }
+.blk-title{ font-size:16px; font-weight:700; color:var(--dark); letter-spacing:-0.3px; line-height:1.2; }
+.blk-body{ font-size:11.5px; color:var(--gray); line-height:1.68; }
+.bar{ width:28px; height:3px; background:var(--red); border-radius:2px; }
+
+/* ─── PROBLEM BULLETS ─── */
+.prob-list{ display:flex; flex-direction:column; gap:7px; }
+.prob-item{
+  display:flex; align-items:flex-start; gap:10px;
+  background:white; border:1px solid var(--border);
+  border-left:3px solid var(--red);
+  border-radius:0 8px 8px 0; padding:10px 13px;
+}
+.prob-icon{ font-size:15px; flex-shrink:0; margin-top:1px; }
+.prob-text h4{ font-size:11.5px; font-weight:700; color:var(--dark); margin-bottom:2px; }
+.prob-text p{ font-size:10.5px; color:var(--gray); line-height:1.5; }
+
+/* ─── HOW IT WORKS ─── */
+.steps{ display:flex; flex-direction:column; gap:7px; }
+.step{
+  display:flex; align-items:flex-start; gap:11px;
+  background:white; border:1px solid var(--border);
+  border-radius:8px; padding:10px 13px;
+}
+.step-num{
+  width:22px; height:22px; border-radius:50%;
+  background:var(--red); color:white;
+  font-size:9px; font-weight:800;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0; margin-top:1px;
+}
+.step h4{ font-size:11.5px; font-weight:700; color:var(--dark); margin-bottom:2px; }
+.step p{ font-size:10.5px; color:var(--gray); line-height:1.5; }
+
+/* ─── PILLARS ─── */
+.pillars{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:7px; }
+.pillar{
+  background:var(--dark); border-radius:8px;
+  padding:12px 10px; text-align:center;
+}
+.pillar-icon{ font-size:18px; margin-bottom:5px; }
+.pillar-name{ font-size:10px; font-weight:700; color:white; line-height:1.3; }
+.pillar-sub{ font-size:9px; color:rgba(255,255,255,0.4); margin-top:2px; }
+
+/* ─── ARCH IMAGE ─── */
+.arch-img{
+  width:100%; display:block; border-radius:6px;
+  border:1px solid var(--border);
+}
+
+/* ─── WHY IT MATTERS ─── */
+.why-list{ display:flex; flex-direction:column; gap:6px; }
+.why-item{
+  display:flex; align-items:flex-start; gap:9px;
+  background:white; border:1px solid var(--border);
+  border-radius:8px; padding:9px 12px;
+}
+.why-dot{ width:7px; height:7px; border-radius:50%; background:var(--red); flex-shrink:0; margin-top:4px; }
+.why-item h4{ font-size:11px; font-weight:700; color:var(--dark); margin-bottom:1px; }
+.why-item p{ font-size:10px; color:var(--gray); line-height:1.5; }
+
+/* ─── FEATURES ─── */
+.features{ display:flex; flex-direction:column; gap:6px; }
+.feat{
+  display:flex; align-items:flex-start; gap:9px;
+  background:white; border:1px solid var(--border);
+  border-radius:8px; padding:9px 12px;
+}
+.feat-dot{ width:7px; height:7px; border-radius:50%; background:var(--red); flex-shrink:0; margin-top:4px; }
+.feat h4{ font-size:11px; font-weight:700; color:var(--dark); margin-bottom:1px; }
+.feat p{ font-size:10px; color:var(--gray); line-height:1.5; }
+
+/* ─── METRICS ─── */
+.metrics{ display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+.metric{
+  background:var(--dark); border-radius:8px;
+  padding:13px 10px; text-align:center;
+}
+.metric-n{ font-size:22px; font-weight:800; color:var(--red); display:block; line-height:1; margin-bottom:4px; }
+.metric-l{ font-size:9px; color:rgba(255,255,255,0.45); letter-spacing:0.05em; text-transform:uppercase; line-height:1.4; }
+
+/* ─── TECH CHIPS ─── */
+.chips{ display:flex; flex-wrap:wrap; gap:5px; }
+.chip{
+  font-size:10px; font-weight:600; padding:3px 10px;
+  border-radius:999px; border:1px solid var(--border);
+  color:var(--dark); background:white;
+}
+.chip.r{ background:#fff0f0; border-color:#fecaca; color:var(--red); }
+
+/* ─── FOOTER ─── */
+.footer{
+  background:var(--dark);
+  padding:14px 44px;
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+}
+.footer-team{ display:flex; flex-wrap:wrap; gap:0; }
+.footer-member{
+  font-size:10px; font-weight:500; color:rgba(255,255,255,0.75);
+  padding:0 14px;
+  border-right:1px solid rgba(255,255,255,0.15);
+}
+.footer-member:first-child{ padding-left:0; }
+.footer-member:last-child{ border-right:none; }
+.footer-logos{ display:flex; align-items:center; gap:14px; flex-shrink:0; }
+.footer-neu{ height:32px; width:auto; filter:brightness(0) invert(1); opacity:0.75; }
+.footer-cw{ height:36px; width:auto; filter:brightness(0) invert(1); opacity:0.8; }
+.footer-copy{ font-size:10px; color:rgba(255,255,255,0.35); text-align:right; line-height:1.8; white-space:nowrap; }
+
+@media print{
+  body{ background:white; padding:0; }
+  .poster{ box-shadow:none; width:11in; }
+  @page{ size:11in 17in portrait; margin:0; }
+}
+</style>
+</head>
+<body>
+<div class="poster">
+
+  <!-- HEADER -->
+  <div class="header">
+    <img src="./image.png" alt="Northeastern University" class="h-neu"/>
+    <div class="h-center">
+      <h1>CourseWeave <span>AI</span></h1>
+      <p class="h-sub">Career-Aligned, AI-Powered Course Recommendation for Northeastern University Graduate Students</p>
+    </div>
+    <img src="./logo_bg.png" alt="CourseWeave AI" class="h-cw"/>
+  </div>
+
+  <!-- TAGLINE BAND -->
+  <div class="band">
+    <span class="band-left">"The right course, for the right role, at the right time."</span>
+    <div class="band-pills">
+      <span class="band-pill">MLOps · Spring 2026</span>
+      <span class="band-pill">Northeastern University</span>
+    </div>
+  </div>
+
+  <!-- 3 COLUMNS -->
+  <div class="cols">
+
+    <!-- ══ COL 1: Problem + How It Works + Tech ══ -->
+    <div class="col">
+
+      <div class="blk">
+        <div class="blk-tag">The Problem</div>
+        <div class="blk-title">Graduate students lack a structured, data-driven path from career objective to curriculum.</div>
+        <div class="bar"></div>
+        <div class="prob-list">
+          <div class="prob-item">
+            <div class="prob-icon">🎯</div>
+            <div class="prob-text">
+              <h4>No Career-to-Curriculum Alignment</h4>
+              <p>Existing academic planning tools do not bridge a student's professional objectives to program-specific course selection at NEU.</p>
+            </div>
+          </div>
+          <div class="prob-item">
+            <div class="prob-icon">📚</div>
+            <div class="prob-text">
+              <h4>2,000+ Courses, No Clear Path</h4>
+              <p>Without structured guidance, students lack a systematic approach to identify courses aligned with their target role across Northeastern's expansive catalog.</p>
+            </div>
+          </div>
+          <div class="prob-item">
+            <div class="prob-icon">🔗</div>
+            <div class="prob-text">
+              <h4>Prerequisite Dependencies Discovered Late</h4>
+              <p>Eligibility conflicts surface at the point of registration rather than during long-term academic planning — leaving limited time to course-correct.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="blk">
+        <div class="blk-tag">How It Works</div>
+        <div class="blk-title">From career objective to an actionable, personalized course plan.</div>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">01</div>
+            <div>
+              <h4>Student Defines Career Objective</h4>
+              <p>The student specifies their target role — e.g., Data Engineer, ML Engineer, or Business Analyst.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">02</div>
+            <div>
+              <h4>Role Mapped to Industry Skill Demand</h4>
+              <p>Adzuna labor market intelligence identifies the competencies employers currently require for that role.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">03</div>
+            <div>
+              <h4>Academic Eligibility Filtering &amp; Ranking</h4>
+              <p>Only prerequisite-compliant, degree-eligible, non-duplicate courses from NEU's catalog are surfaced.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">04</div>
+            <div>
+              <h4>Contextualized Recommendations Delivered</h4>
+              <p>Each recommendation is grounded in the student's academic history, degree track, and stated career objective.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="blk">
+        <div class="blk-tag">Technology Stack</div>
+        <div class="chips">
+          <span class="chip r">Gemini 2.5 Flash</span>
+          <span class="chip r">Pinecone Hybrid</span>
+          <span class="chip r">RAG Pipeline</span>
+          <span class="chip">FastAPI</span>
+          <span class="chip">React + Vite</span>
+          <span class="chip">PostgreSQL · GCP</span>
+          <span class="chip">Apache Airflow</span>
+          <span class="chip">MLflow · DagsHub</span>
+          <span class="chip">Docker · CI/CD</span>
+          <span class="chip">BGE-small-en-v1.5</span>
+          <span class="chip">Cross-Encoder</span>
+          <span class="chip">Adzuna API</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══ COL 2+3: Architecture spanning full right side, then 2 subcols ══ -->
+    <div class="col-right">
+
+      <!-- Architecture image — full 2/3 width -->
+      <div class="arch-section">
+        <div class="blk">
+          <div class="blk-tag">System Architecture</div>
+          <div class="blk-title">CourseWeave AI — Intelligent Course Recommendation System</div>
+          <div class="bar" style="margin-bottom:10px;"></div>
+          <img src="./Architecture_clean.png" alt="CourseWeave AI — System Architecture" class="arch-img"/>
+        </div>
+      </div>
+
+      <!-- Two sub-columns below architecture -->
+      <div class="subcols">
+
+        <!-- Sub-col left: Data pillars + MLOps -->
+        <div class="subcol mid">
+
+          <div class="blk">
+            <div class="blk-tag">Data-Grounded Recommendations</div>
+            <div class="blk-title">Grounded in verified institutional data — no hallucination.</div>
+            <div class="pillars">
+              <div class="pillar">
+                <div class="pillar-icon">🎯</div>
+                <div class="pillar-name">Career Objective-Driven</div>
+                <div class="pillar-sub">Professional goal anchors all outputs</div>
+              </div>
+              <div class="pillar">
+                <div class="pillar-icon">🏛️</div>
+                <div class="pillar-name">NEU Institutional Data</div>
+                <div class="pillar-sub">Verified catalog, prerequisites &amp; degrees</div>
+              </div>
+              <div class="pillar">
+                <div class="pillar-icon">💡</div>
+                <div class="pillar-name">Explainable AI</div>
+                <div class="pillar-sub">Every recommendation is fully traceable</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="blk">
+            <div class="blk-tag">MLOps Practices</div>
+            <div class="blk-title">Production-Grade Pipeline</div>
+            <div class="why-list">
+              <div class="why-item">
+                <div class="why-dot"></div>
+                <div>
+                  <h4>Airflow DAG — Weekly Data Pipeline</h4>
+                  <p>8-task DAG: acquire → preprocess → validate → anomaly detect → DVC version → load → report</p>
+                </div>
+              </div>
+              <div class="why-item">
+                <div class="why-dot"></div>
+                <div>
+                  <h4>MLflow on DagsHub — Experiment Tracking</h4>
+                  <p>Precision@3, recall, guardrail violations, and Gemini fallback count logged per evaluation run</p>
+                </div>
+              </div>
+              <div class="why-item">
+                <div class="why-dot"></div>
+                <div>
+                  <h4>GitHub Actions CI/CD</h4>
+                  <p>Ruff lint, unit tests, import validation, and Docker build triggered on every push to main</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="blk">
+            <div class="blk-tag">Evaluation Results · 15 Test Cases</div>
+            <div class="metrics">
+              <div class="metric">
+                <span class="metric-n">0.47</span>
+                <span class="metric-l">Avg Precision<br/>@ 3</span>
+              </div>
+              <div class="metric">
+                <span class="metric-n">100%</span>
+                <span class="metric-l">Guardrail<br/>Pass Rate</span>
+              </div>
+              <div class="metric">
+                <span class="metric-n">0</span>
+                <span class="metric-l">Guardrail<br/>Violations</span>
+              </div>
+              <div class="metric">
+                <span class="metric-n">0.78</span>
+                <span class="metric-l">Prereq Flag<br/>Accuracy</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Sub-col right: Features + Why It Matters -->
+        <div class="subcol">
+
+          <div class="blk">
+            <div class="blk-tag">Key Features</div>
+            <div class="blk-title">Purpose-built for Northeastern University graduate students.</div>
+            <div class="bar"></div>
+            <div class="features">
+              <div class="feat">
+                <div class="feat-dot"></div>
+                <div>
+                  <h4>RAG-Powered Course Recommendations</h4>
+                  <p>Pinecone hybrid retrieval (dense BGE + sparse BM25) with HyDE — grounded in NEU syllabi and the institutional course catalog.</p>
+                </div>
+              </div>
+              <div class="feat">
+                <div class="feat-dot"></div>
+                <div>
+                  <h4>Automated Prerequisite Validation</h4>
+                  <p>Enforced guardrails ensure only eligible, not-yet-completed courses are presented. Zero violations recorded across all evaluation cases.</p>
+                </div>
+              </div>
+              <div class="feat">
+                <div class="feat-dot"></div>
+                <div>
+                  <h4>Real-Time Degree Audit</h4>
+                  <p>Tracks core vs. elective credit balance, cumulative GPA, expected graduation timeline, and degree path (coursework / project / thesis).</p>
+                </div>
+              </div>
+              <div class="feat">
+                <div class="feat-dot"></div>
+                <div>
+                  <h4>Conversational AI Advisor</h4>
+                  <p>Natural language interface with persistent conversation history, enabling iterative academic planning. Powered by Gemini 2.5 Flash.</p>
+                </div>
+              </div>
+              <div class="feat">
+                <div class="feat-dot"></div>
+                <div>
+                  <h4>Semester Roadmap Builder</h4>
+                  <p>Visual, semester-by-semester academic plan aligned to the student's career objective and remaining program requirements.</p>
+                </div>
+              </div>
+              <div class="feat">
+                <div class="feat-dot"></div>
+                <div>
+                  <h4>Augments Academic Advising Capacity</h4>
+                  <p>Automates data-intensive course matching, enabling advisors to focus on high-value, strategic student engagements.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="blk">
+            <div class="blk-tag">Why It Matters</div>
+            <div class="blk-title">Institutional and academic impact beyond the individual student.</div>
+            <div class="why-list">
+              <div class="why-item">
+                <div class="why-dot"></div>
+                <div>
+                  <h4>Improved Academic &amp; Career Outcomes</h4>
+                  <p>Structured course sequencing aligned to professional objectives supports on-time graduation and strengthens post-graduate employment readiness.</p>
+                </div>
+              </div>
+              <div class="why-item">
+                <div class="why-dot"></div>
+                <div>
+                  <h4>Industry–Curriculum Alignment</h4>
+                  <p>Bridges real-time employer skill demand with NEU's academic offerings — informing alignment between workforce requirements and institutional curriculum.</p>
+                </div>
+              </div>
+              <div class="why-item">
+                <div class="why-dot"></div>
+                <div>
+                  <h4>Curriculum Gap Intelligence</h4>
+                  <p>Aggregated recommendation patterns surface emerging skill areas underserved by current NEU offerings, providing actionable signals for program development.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div><!-- /subcols -->
+    </div><!-- /col-right -->
+
+  </div><!-- /cols -->
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <div class="footer-team">
+      <span class="footer-member">Sachin Sreekumar</span>
+      <span class="footer-member">Nagashree Bommenahalli Kumaraswamy</span>
+      <span class="footer-member">Kavin Priyadarrsan Murugesan</span>
+      <span class="footer-member">Siddharth Mohapatra</span>
+      <span class="footer-member">Vigneshwaran Jayaraman</span>
+      <span class="footer-member">Jogeashwini Srinivasan Ramesh</span>
+    </div>
+    <div class="footer-logos">
+      <img src="./image.png" alt="NEU" class="footer-neu"/>
+      <img src="./logo_bg.png" alt="CourseWeave AI" class="footer-cw"/>
+    </div>
+    <div class="footer-copy">
+      MLOps · Spring 2026<br/>
+      Northeastern University
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
