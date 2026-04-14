@@ -35,7 +35,7 @@ def get_db():
     return conn
 
 
-def register_student(
+def create_student(
     name: str,
     email: str,
     password: str,
@@ -44,13 +44,9 @@ def register_student(
     degree_path: str = None,
 ) -> dict:
     """
-    Insert new student into Postgres, then trigger the recommendation pipeline.
-
-    Returns:
-        {
-            "student":        { id, name, email, program_code, target_career },
-            "recommendation": full generate_recommendation() response dict
-        }
+    Insert new student into Postgres only. Returns the student row immediately.
+    Does NOT trigger the AI pipeline — call warm_up_recommendation() separately
+    as a background task so signup never blocks on Gemini/Pinecone.
 
     Raises:
         psycopg2.errors.UniqueViolation  if email already exists
@@ -59,7 +55,6 @@ def register_student(
     hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     degree_path = degree_path or 'coursework'
 
-    # ── Layer 2: Postgres INSERT ─────────────────────────────────────────────
     logger.info("Registering student: %s (%s)", email, program_code)
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -73,16 +68,51 @@ def register_student(
     )
     student = dict(cur.fetchone())
     conn.close()
-    logger.info("Student %d inserted into Postgres — triggering AI pipeline", student["id"])
+    logger.info("Student %d inserted into Postgres", student["id"])
+    return student
 
-    # ── Layer 3: AI pipeline (called after DB commit is confirmed) ────────────
+
+def warm_up_recommendation(student_id: int) -> None:
+    """
+    Fire-and-forget: pre-generate the first recommendation after signup.
+    Intended to run as a BackgroundTask so the signup response is not blocked.
+    Errors are logged but never raised.
+    """
+    try:
+        from src.agents.recommendation_agent import generate_recommendation
+        generate_recommendation(student_id=student_id)
+        logger.info("Background recommendation ready for student %d", student_id)
+    except Exception as e:
+        logger.error("Background recommendation failed for student %d: %s", student_id, e)
+
+
+def register_student(
+    name: str,
+    email: str,
+    password: str,
+    program_code: str,
+    target_career: str,
+    degree_path: str = None,
+) -> dict:
+    """
+    Legacy helper kept for backwards compatibility with any direct callers.
+    Prefer create_student() + warm_up_recommendation() (as a BackgroundTask) for
+    HTTP endpoints where you don't want to block on the AI pipeline.
+    """
+    student = create_student(
+        name=name,
+        email=email,
+        password=password,
+        program_code=program_code,
+        target_career=target_career,
+        degree_path=degree_path,
+    )
     try:
         from src.agents.recommendation_agent import generate_recommendation
         recommendation = generate_recommendation(student_id=student["id"])
     except Exception as e:
         logger.error("Recommendation pipeline failed for new student %d: %s", student["id"], e)
         recommendation = None
-
     return {
         "student": student,
         "recommendation": recommendation,

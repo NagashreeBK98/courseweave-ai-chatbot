@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
@@ -143,15 +143,15 @@ def run_migrations():
 # ── Auth endpoints ───────────────────────────────────────────────────────────
 
 @app.post("/auth/signup")
-def signup(req: SignupRequest):
+def signup(req: SignupRequest, background_tasks: BackgroundTasks):
     if req.program_code not in PROGRAMS:
         raise HTTPException(400, detail=f"Invalid program. Choose from {PROGRAMS}")
     if req.target_career not in CAREERS:
         raise HTTPException(400, detail=f"Please select a career from the supported options: {CAREERS}")
 
     try:
-        from src.api.students import register_student
-        result = register_student(
+        from src.api.students import create_student, warm_up_recommendation
+        student = create_student(
             name=req.name,
             email=req.email,
             password=req.password,
@@ -159,12 +159,13 @@ def signup(req: SignupRequest):
             target_career=req.target_career,
             degree_path=req.degree_path or None,
         )
-        student = result["student"]
         token = create_token(student["id"], student["email"])
+        # Trigger AI pipeline in the background — signup never blocks on Gemini/Pinecone
+        background_tasks.add_task(warm_up_recommendation, student["id"])
         return {
             "token": token,
             "student": student,
-            "initial_recommendation": result["recommendation"],
+            "initial_recommendation": None,
         }
     except psycopg2.errors.UniqueViolation:
         raise HTTPException(409, detail="Email already registered")
