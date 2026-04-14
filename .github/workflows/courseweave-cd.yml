@@ -100,11 +100,3 @@ jobs:
             --format 'value(status.url)')
           echo "Frontend deployed at: $FRONTEND_URL"
 
-      - name: Update backend CORS with frontend URL
-        run: |
-          FRONTEND_URL=$(gcloud run services describe ${{ env.FRONTEND_SERVICE }} \
-            --region ${{ env.GCP_REGION }} \
-            --format 'value(status.url)')
-          gcloud run services update ${{ env.BACKEND_SERVICE }} \
-            --region ${{ env.GCP_REGION }} \
-            --update-env-vars="FRONTEND_URL=$FRONTEND_URL"
