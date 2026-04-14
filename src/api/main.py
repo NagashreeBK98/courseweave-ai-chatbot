@@ -42,16 +42,31 @@ PROGRAMS = ["MS_DAE", "MS_DS", "MS_CS", "MS_DA", "MS_IS"]
 CAREERS = ["Data Engineer", "Data Scientist", "Data Analyst", "Business Analyst", "Software Engineer", "ML Engineer"]
 
 
+from psycopg2 import pool as pg_pool
+
+_db_pool = None
+
+def _get_pool():
+    global _db_pool
+    if _db_pool is None:
+        _db_pool = pg_pool.ThreadedConnectionPool(
+            minconn=1,
+            maxconn=10,
+            host=os.getenv("DB_HOST", "34.23.27.68"),
+            port=int(os.getenv("DB_PORT", 5432)),
+            dbname=os.getenv("DB_NAME", "courseweave"),
+            user=os.getenv("DB_USER", "courseweave_user"),
+            password=os.getenv("DB_PASSWORD", ""),
+        )
+    return _db_pool
+
 def get_db():
-    conn = psycopg2.connect(
-        host=os.getenv("DB_HOST", "34.23.27.68"),
-        port=int(os.getenv("DB_PORT", 5432)),
-        dbname=os.getenv("DB_NAME", "courseweave"),
-        user=os.getenv("DB_USER", "courseweave_user"),
-        password=os.getenv("DB_PASSWORD", ""),
-    )
+    conn = _get_pool().getconn()
     conn.autocommit = True
     return conn
+
+def release_db(conn):
+    _get_pool().putconn(conn)
 
 
 def create_token(student_id: int, email: str) -> str:
@@ -137,7 +152,7 @@ def run_migrations():
         ]:
             cur.execute(sql)
         conn.commit()
-        conn.close()
+        release_db(conn)
         logger.info("DB migrations complete")
     except Exception as e:
         logger.error("Migration error: %s", e)
@@ -182,7 +197,7 @@ def login(req: LoginRequest):
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("SELECT * FROM students WHERE email = %s", (req.email,))
         row = cur.fetchone()
-        conn.close()
+        release_db(conn)
         if not row:
             raise HTTPException(401, detail="Invalid credentials")
         student = dict(row)
@@ -208,7 +223,7 @@ def me(user=Depends(verify_token)):
             (user["student_id"],),
         )
         student = dict(cur.fetchone())
-        conn.close()
+        release_db(conn)
         return student
     except Exception as e:
         raise HTTPException(500, detail=str(e))
@@ -268,7 +283,7 @@ def dashboard(user=Depends(verify_token)):
         grades = [gpa_map.get(c["grade"], 0) for c in completed if c["grade"]]
         gpa = round(sum(grades) / len(grades), 2) if grades else 0.0
 
-        conn.close()
+        release_db(conn)
         return {
             "student": student,
             "stats": {
@@ -306,7 +321,7 @@ def get_courses(program: Optional[str] = None, course_type: Optional[str] = None
         query += " ORDER BY program_code, course_type, course_code"
         cur.execute(query, params)
         courses = [dict(r) for r in cur.fetchall()]
-        conn.close()
+        release_db(conn)
         return courses
     except Exception as e:
         raise HTTPException(500, detail=str(e))
@@ -325,7 +340,7 @@ def get_prerequisites(course_code: str, user=Depends(verify_token)):
             (course_code,),
         )
         prereqs = [dict(r) for r in cur.fetchall()]
-        conn.close()
+        release_db(conn)
         return prereqs
     except Exception as e:
         raise HTTPException(500, detail=str(e))
@@ -349,7 +364,7 @@ def student_courses(user=Depends(verify_token)):
             (sid,),
         )
         courses = [dict(r) for r in cur.fetchall()]
-        conn.close()
+        release_db(conn)
         return courses
     except Exception as e:
         raise HTTPException(500, detail=str(e))
@@ -369,7 +384,7 @@ def remove_course(course_code: str, user=Depends(verify_token)):
             "DELETE FROM student_courses_roadmap_temp_addition WHERE student_id = %s AND course_code = %s",
             (sid, course_code)
         )
-        conn.close()
+        release_db(conn)
         return {"deleted": True}
     except Exception as e:
         raise HTTPException(500, detail=str(e))
@@ -401,7 +416,7 @@ def add_course(req: AddCourseRequest, user=Depends(verify_token)):
             )
 
         row = dict(cur.fetchone())
-        conn.close()
+        release_db(conn)
         return row
     except psycopg2.errors.UniqueViolation:
         raise HTTPException(409, detail="Course already added")
@@ -431,7 +446,7 @@ def update_profile(req: StudentProfileRequest, user=Depends(verify_token)):
              req.current_term, req.planning_semester, req.manual_gpa, sid),
         )
         conn.commit()
-        conn.close()
+        release_db(conn)
         return {"status": "ok"}
     except Exception as e:
         raise HTTPException(500, detail=str(e))
@@ -450,7 +465,7 @@ def get_profile(user=Depends(verify_token)):
             (sid,),
         )
         row = cur.fetchone()
-        conn.close()
+        release_db(conn)
         return dict(row) if row else {}
     except Exception as e:
         raise HTTPException(500, detail=str(e))
@@ -500,7 +515,7 @@ def add_courses_batch(req: BatchCoursesRequest, user=Depends(verify_token)):
             added += 1
 
         conn.commit()
-        conn.close()
+        release_db(conn)
         return {"added": added, "skipped": skipped}
     except Exception as e:
         raise HTTPException(500, detail=str(e))
@@ -549,7 +564,7 @@ def check_prerequisites(user=Depends(verify_token)):
                 "completed": code in completed_codes,
             })
 
-        conn.close()
+        release_db(conn)
         return result
     except Exception as e:
         raise HTTPException(500, detail=str(e))
@@ -615,7 +630,7 @@ Format your response with clear headings and bullet points for easy reading."""
             ai_summary = "Detailed syllabus information not available for this course."
             syllabus_text = ""
 
-        conn.close()
+        release_db(conn)
 
         return {
             **course_dict,
@@ -647,7 +662,7 @@ def list_conversations(user=Depends(verify_token)):
             ORDER BY c.updated_at DESC
         """, (sid,))
         convs = [dict(r) for r in cur.fetchall()]
-        conn.close()
+        release_db(conn)
         return convs
     except Exception as e:
         raise HTTPException(500, detail=str(e))
@@ -673,7 +688,7 @@ def get_conversation(conv_id: int, user=Depends(verify_token)):
             ORDER BY created_at ASC
         """, (conv_id,))
         messages = [dict(r) for r in cur.fetchall()]
-        conn.close()
+        release_db(conn)
         return {**dict(conv), "messages": messages}
     except HTTPException:
         raise
@@ -688,7 +703,7 @@ def delete_conversation(conv_id: int, user=Depends(verify_token)):
         conn = get_db()
         cur = conn.cursor()
         cur.execute("DELETE FROM conversations WHERE id = %s AND student_id = %s", (conv_id, sid))
-        conn.close()
+        release_db(conn)
         return {"deleted": True}
     except Exception as e:
         raise HTTPException(500, detail=str(e))
@@ -805,7 +820,7 @@ def recommend(req: RecommendRequest, user=Depends(verify_token)):
             cur.execute("UPDATE conversations SET updated_at = NOW() WHERE id = %s", (conv_id,))
 
         conn.commit()
-        conn.close()
+        release_db(conn)
         result["conversation_id"] = conv_id
         return result
 
@@ -833,7 +848,7 @@ def _fallback_recommend(student_id: int):
             (student_id, student_id),
         )
         courses = [dict(r) for r in cur.fetchall()]
-        conn.close()
+        release_db(conn)
         return {
             "recommendations": [
                 {**c, "reason": "Recommended based on your program and remaining requirements"}
@@ -922,7 +937,7 @@ def roadmap(user=Depends(verify_token)):
             (program_code, sid),
         )
         all_remaining = [dict(r) for r in cur.fetchall()]
-        conn.close()
+        release_db(conn)
 
         # Only include courses needed to satisfy remaining degree requirements
         planned = []
