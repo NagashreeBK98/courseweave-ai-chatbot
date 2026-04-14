@@ -19,4 +19,16 @@ logs/
 
 # Generated auth file
 simple_auth_manager_passwords.json.generated
+
+# Dependencies & virtual env
 frontend/node_modules/
+.venv/
+
+# Frontend build output
+frontend/dist/
+
+# Test & tool cache
+.pytest_cache/
+
+# Claude Code session data
+.claude/

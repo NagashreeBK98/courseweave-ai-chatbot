@@ -49,7 +49,7 @@ export default function AppShell() {
     <div className={styles.shell}>
       <aside className={styles.sidebar}>
         <div className={styles.logo}>
-          <img src="/logo.jpeg" alt="CourseWeave" className={styles.logoImg} />
+          <img src="/logo_bg.png" alt="CourseWeave" className={styles.logoImg} />
         </div>
 
         <nav className={styles.nav}>
