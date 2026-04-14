@@ -44,7 +44,9 @@ logger = logging.getLogger(__name__)
 
 _gemini_client = None
 
-def get_gemini_client():
+_gemini_client = None
+
+def _get_gemini_client():
     """Lazily initialize Gemini client — avoids startup crash if Vertex AI is unreachable at import time."""
     global _gemini_client
     if _gemini_client is None:
@@ -62,14 +64,14 @@ def gemini_generate(prompt: str, max_retries: int = 4) -> str:
     Handles 429 RESOURCE_EXHAUSTED gracefully — retries up to max_retries times.
     This ensures MLflow evaluation runs never fail due to rate limits.
 
-    Backoff: 15s → 30s → 60s → 120s
+    Backoff: 7s → 14s → 28s → 56s
     Raises exception only after all retries exhausted.
     """
     delays = [7, 14, 28, 56]
 
     for attempt in range(max_retries):
         try:
-            response = get_gemini_client().models.generate_content(
+            response = _get_gemini_client().models.generate_content(
                 model="gemini-2.5-flash",
                 contents=prompt
             )
@@ -356,7 +358,6 @@ def generate_recommendation(
     if degree_path:
         success = update_degree_path(student_id, degree_path)
         if success:
-            # Refresh audit with new path
             degree_audit = get_degree_audit(student_id)
             logger.info("Degree path updated to: %s", degree_path)
 
@@ -389,26 +390,20 @@ def generate_recommendation(
             action_taken="complete",
             response_time_sec=round(time.time() - start_time, 2)
         )
-
         return {
-            "student":      student_context,
-            "degree_audit": degree_audit,
-            "career_goal":  career_goal,
-            "action":       "complete",
-            "courses":      [],
-            "prereq_status": [],
+            "student":        student_context,
+            "degree_audit":   degree_audit,
+            "career_goal":    career_goal,
+            "action":         "complete",
+            "courses":        [],
+            "prereq_status":  [],
             "recommendation": recommendation,
-            "career_skills": {},
+            "career_skills":  {},
         }
 
     if next_action == "ask_path" and not degree_path:
-        # Student needs to choose a path — ask them before recommending
         logger.info("Step 3: Student needs path selection")
-
-        prompt = build_path_selection_prompt(
-            student_context, degree_audit, career_goal
-        )
-
+        prompt = build_path_selection_prompt(student_context, degree_audit, career_goal)
         try:
             path_question = gemini_generate(prompt)
         except Exception as e:
@@ -453,8 +448,6 @@ def generate_recommendation(
     career_skills = query_result["career_skills"]
 
     # ── Step 4b: Dynamic top_k based on credits remaining ────────────────────
-    # Each course = 4 credits. Show enough courses to fill remaining semesters,
-    # capped at 6 to keep the response readable. Minimum 3.
     credits_remaining = degree_audit.get("credits_remaining", 32)
     top_k = max(3, min(credits_remaining // 4, 6))
     logger.info("Dynamic top_k=%d based on %d credits remaining", top_k, credits_remaining)
@@ -503,9 +496,8 @@ def generate_recommendation(
         student_context["completed_courses"],
         student_context["prereq_map"]
     )
-
-    prereq_order     = [p["course_code"] for p in prereq_status]
-    courses_ordered  = sorted(
+    prereq_order    = [p["course_code"] for p in prereq_status]
+    courses_ordered = sorted(
         courses,
         key=lambda c: prereq_order.index(c["course_code"])
         if c["course_code"] in prereq_order else 999
@@ -514,14 +506,9 @@ def generate_recommendation(
     # ── Step 7: Gemini explanation ───────────────────────────────────────────
     logger.info("Step 7: Generating Gemini recommendation")
     prompt = build_recommendation_prompt(
-        student_context,
-        degree_audit,
-        courses_ordered,
-        prereq_status,
-        career_goal,
-        career_skills
+        student_context, degree_audit, courses_ordered,
+        prereq_status, career_goal, career_skills
     )
-
     try:
         recommendation = gemini_generate(prompt)
     except Exception as e:
@@ -568,13 +555,6 @@ def generate_followup(
     Handle follow-up questions within an existing session.
     Re-fetches student/degree data from DB but skips Pinecone entirely.
     Uses conversation history for context-aware Gemini responses.
-
-    Args:
-        student_id:           Postgres student ID
-        session_context:      Cached from first turn { courses, prereq_status, career_goal, career_skills }
-        conversation_history: List of { role: "user"|"model", text: str } dicts
-
-    Returns same shape as generate_recommendation() with action="followup" and courses=[].
     """
     logger.info("Follow-up turn for student %d (%d messages in history)", student_id, len(conversation_history))
 
@@ -588,7 +568,7 @@ def generate_followup(
     career_goal   = session_context.get("career_goal", student_context.get("target_career", ""))
     career_skills = session_context.get("career_skills", {})
 
-    courses_text = format_courses_for_prompt(courses, prereq_status)
+    courses_text  = format_courses_for_prompt(courses, prereq_status)
 
     history_lines = []
     for msg in conversation_history:
@@ -638,10 +618,8 @@ if __name__ == "__main__":
 
     print("\n=== Testing recommendation_agent.py with degree audit ===\n")
 
-    # ── Test 1: Aisha — path undecided, near end of core → should ask path ──
     print("--- Test 1: Aisha Patel (path undecided, needs path selection) ---\n")
     result = generate_recommendation(student_id=1)
-
     print(f"Student:     {result['student']['name']}")
     print(f"Action:      {result['action']}")
     print(f"Credits:     {result['degree_audit']['credits_completed']}/{result['degree_audit']['total_credits']}")
@@ -651,13 +629,8 @@ if __name__ == "__main__":
     print("="*60)
     print(result["recommendation"])
 
-    # ── Test 2: Aisha — student chose coursework path → now recommend ────────
     print("\n\n--- Test 2: Aisha chooses coursework path → recommendations ---\n")
-    result2 = generate_recommendation(
-        student_id=1,
-        degree_path="coursework"
-    )
-
+    result2 = generate_recommendation(student_id=1, degree_path="coursework")
     print(f"Student:     {result2['student']['name']}")
     print(f"Action:      {result2['action']}")
     print(f"Path saved:  {result2['degree_audit']['degree_path']}")
@@ -669,10 +642,8 @@ if __name__ == "__main__":
     print("="*60)
     print(result2["recommendation"])
 
-    # ── Test 3: Carlos — Data Scientist ──────────────────────────────────────
     print("\n\n--- Test 3: Carlos Mendez (Data Scientist) ---\n")
     result3 = generate_recommendation(student_id=2, degree_path="project")
-
     print(f"Student:     {result3['student']['name']}")
     print(f"Action:      {result3['action']}")
     print(f"Path:        {result3['degree_audit']['degree_path']}")
