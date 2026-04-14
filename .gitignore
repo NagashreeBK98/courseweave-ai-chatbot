@@ -2,6 +2,8 @@
 # data/careers.json is now tracked in the repo
 configs/*.json
 gha-creds-*.json
+gcp-key.json
+.claude/
 .env
 CLAUDE.md
 airflow-home/
